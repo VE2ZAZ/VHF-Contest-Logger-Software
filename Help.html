@@ -1,0 +1,764 @@
+<!DOCTYPE html PUBLIC "-//W3C//DTD HTML 4.0 Transitional//EN">
+<html>
+  <head>
+    <meta http-equiv="content-type" content="text/html; charset=UTF-8">
+    <title>VE2ZAZ - Si5351 QRSS Transmitter (Beacon) Configuration
+      Software</title>
+    <meta name="generator" content="LibreOffice 6.0.7.3 (Linux)">
+    <meta name="created" content="00:00:00">
+    <meta name="changed" content="2019-11-07T20:07:18.401989250">
+    <style type="text/css">
+		@page { margin: 0.79in }
+		p { margin-bottom: 0.1in; line-height: 115% }
+		h2.western { font-family: "Liberation Sans", sans-serif; font-size: 16pt }
+		h2.cjk { font-family: "Noto Sans CJK SC Regular"; font-size: 16pt }
+		h2.ctl { font-family: "Lohit Devanagari"; font-size: 16pt }
+		h4.western { font-family: "Liberation Sans", sans-serif; font-size: 13pt; font-style: italic }
+		h4.cjk { font-family: "Noto Sans CJK SC Regular"; font-size: 13pt; font-style: italic }
+		h4.ctl { font-family: "Lohit Devanagari"; font-size: 13pt; font-style: italic }
+		a:link { so-language: zxx }
+	</style>
+  </head>
+  <body dir="ltr" bgcolor="#eeeeee" link="#0000EE" lang="en-US"
+    alink="#EE0000" vlink="#551A8B" text="#000000">
+    <font face="Helvetica, Arial, sans-serif"> </font>
+    <h1 style="margin-top: 0.17in; margin-bottom: 0.08in; line-height:
+      100%; page-break-after: avoid" align="center"><font
+        color="#0066b3" face="Helvetica, Arial, sans-serif"><font
+          style="font-size: 22pt" size="6"><b>ARRL VHF Contest Logger<br>
+          </b></font></font></h1>
+    <font face="Helvetica, Arial, sans-serif"> </font>
+    <h1 align="center"><font style="font-size: 14pt" face="Helvetica,
+        Arial, sans-serif" size="4">Version 1.0, July 2021</font></h1>
+    <font face="Helvetica, Arial, sans-serif"> </font>
+    <p style="margin-top: 0.04in; margin-bottom: 0.08in; line-height:
+      100%; page-break-after: avoid" align="center"><font
+        style="font-size: 14pt" face="Helvetica, Arial, sans-serif"
+        size="4"> By Bert, VE2ZAZ (http://ve2zaz.net)</font></p>
+    <font face="Helvetica, Arial, sans-serif"> </font>
+    <p> </p>
+    <font face="Helvetica, Arial, sans-serif"> </font>
+    <h2 class="western"><font face="Helvetica, Arial, sans-serif">Overview</font></h2>
+    <font face="Helvetica, Arial, sans-serif"> </font>
+    <p><font face="Helvetica, Arial, sans-serif">This amateur radio
+        software provides the ability to log and display the QSOs (radio
+        contacts) made during one of the ARRL VHF contests. It offers a
+        simple but efficient interface customized for these contests. </font><font
+        face="Helvetica, Arial, sans-serif"><font face="Helvetica,
+          Arial, sans-serif"><font face="Helvetica, Arial, sans-serif">The
+
+            interface is distributed over several independent windows,
+            which allows the user to better organize the desktop. The
+            software performs continuous "dupe checks" and score
+            calculation. It also displays the worked grid squares using
+            color boxes on a zoom-able Maidenhead grid world map. </font></font></font><font
+        face="Helvetica, Arial, sans-serif">To save the contest
+        information, the script uses a simple CSV (comma-separated text)
+        file; no complex database is used. Since this software is a
+        python script, it can be run on Linux, Windows and Mac, once the
+        python-3 interpreter is installed. Another benefit of being a
+        Python script is that it </font><font face="Helvetica, Arial,
+        sans-serif"><font face="Helvetica, Arial, sans-serif">uses a
+          simple text file as source code. It can thus be easily
+          improved and customized by the user. </font></font><font
+        face="Helvetica, Arial, sans-serif"><font face="Helvetica,
+          Arial, sans-serif"><font face="Helvetica, Arial, sans-serif"><font
+              face="Helvetica, Arial, sans-serif"><font face="Helvetica,
+                Arial, sans-serif">Though it is customized for VHF
+                contesting, this software</font></font> can also be used
+            for general logging of VHF/UHF/Microwave contacts. </font>
+        </font></font></p>
+    <table cellspacing="2" cellpadding="2" border="0" height="439"
+      align="center" width="689">
+      <tbody>
+        <tr>
+          <td valign="top"><a href="images/All_Windows.png"><img
+                moz-do-not-send="true" src="images/All_Windows.png"
+                alt="" border="0" height="422" width="680"></a><br>
+          </td>
+        </tr>
+        <tr align="center">
+          <td valign="top"><font face="Helvetica, Arial, sans-serif">The
+              ARRL VHF Contest Logger software windows</font><br>
+          </td>
+        </tr>
+      </tbody>
+    </table>
+    <h2><font face="Helvetica, Arial, sans-serif">Detailed Description</font></h2>
+    <h3><font face="Helvetica, Arial, sans-serif">QSO Capture Window<br>
+      </font></h3>
+    <font face="Helvetica, Arial, sans-serif"> </font>
+    <p><font face="Helvetica, Arial, sans-serif">The QSO Capture window
+        is the main input channel for adding new QSOs or for editing
+        existing QSOs in the logbook. The QSO Capture window has the
+        following features and behavior.<br>
+      </font></p>
+    <table cellspacing="2" cellpadding="2" border="0" height="162"
+      align="right" width="250">
+      <tbody>
+        <tr align="center">
+          <td valign="top"><a href="images/QSO_Capture_Window.png"><img
+                moz-do-not-send="true"
+                src="images/QSO_Capture_Window.png" alt="" border="0"
+                height="126" width="197"></a><br>
+          </td>
+        </tr>
+        <tr align="center">
+          <td valign="top"><font face="Helvetica, Arial, sans-serif">The
+              QSO Capture window</font></td>
+        </tr>
+      </tbody>
+    </table>
+    <ul>
+      <li><font face="Helvetica, Arial, sans-serif">A new QSO is added
+          to the logbook by executing the following sequence:</font></li>
+      <ol>
+        <li><font face="Helvetica, Arial, sans-serif">Fill in the
+            amateur radio callsign of the worked station in the Callsign
+            entry box,</font></li>
+        <li><font face="Helvetica, Arial, sans-serif">Fill in the
+            2-Letter/2-number Maidenhead grid square in the Grid Square
+            entry box,</font></li>
+        <li><font face="Helvetica, Arial, sans-serif">From the "Band"
+            pull-down list select the amateur radio band used for
+            working the station,</font></li>
+        <li><font face="Helvetica, Arial, sans-serif">From the "Mode"
+            pull-down list select the modulation mode used.</font></li>
+        <li><font face="Helvetica, Arial, sans-serif">Click on the "Save
+            QSO" button.<br>
+          </font></li>
+      </ol>
+      <li><font face="Helvetica, Arial, sans-serif">The program
+          automatically fills in the current date and time when the
+          "Date" and "Time-UTC" entry fields are grayed out, which is
+          the default program behavior. The user can also perform
+          manually date/time entry when needed by clicking on one of
+          these two fields. A white background in the fields indicate a
+          manual date/time entry mode.<br>
+        </font></li>
+      <li><font face="Helvetica, Arial, sans-serif">Once the proper band
+          and mode are selected, the interface allows to repeatedly
+          capture QSOs using only the keyboard, without reaching for the
+          mouse, for as long as the QSOs occur on the same band and with
+          the same mode. The &lt;Tab&gt; key provides a quick jump of
+          the cursor from the Callsign field to the Grid Square field.
+          Pressing the &lt;Return&gt; key when the cursor is located in
+          either of these fields will save the QSO to the logbook.</font></li>
+      <li><font face="Helvetica, Arial, sans-serif">The "Cancel" button
+          clears any data from the Callsign entry and the Grid Square
+          entry fields. It also puts the Date/Time fields back into
+          automatic update. When in QSO Edit mode, it cancels the Edit
+          QSO mode and returns the window back into new QSO Capture
+          mode. The Cancel button has no effect on the Logbook content.<br>
+        </font></li>
+      <li><font face="Helvetica, Arial, sans-serif">The program performs
+          "Dupe" (contact duplication) checks on-the-fly as the operator
+          is typing in the data (a dupe is a contact with the same
+          callsign/grid/band). In the presence of a dupe, the QSO
+          Capture window background switches to an orange color and the
+          already existing QSO is highlighted in orange color in the QSO
+          list.</font></li>
+      <li><font face="Helvetica, Arial, sans-serif">The program performs
+          an on-the-fly check of the callsign and grid square formats.
+          Any character not allowed in the formats is deleted by the
+          program as soon as it is entered by the user. The allowed
+          callsign format is a maximum of eight letters,digits and the
+          slash ('/') character. The allowed grid square format is two
+          letters followed by two digits.</font></li>
+      <li><font face="Helvetica, Arial, sans-serif">The program converts
+          all characters typed in to UPPERCASE.</font></li>
+      <li><font face="Helvetica, Arial, sans-serif">The logbook file
+          gets updated as soon as a new QSO is captured, and after a QSO
+          is edited or erased.<br>
+        </font></li>
+    </ul>
+    <h3><font face="Helvetica, Arial, sans-serif">QSO List Window</font></h3>
+    <ul>
+    </ul>
+    <font face="Helvetica, Arial, sans-serif">The "QSO List" window is
+      the main program window. It shows a list of all radio contacts
+      that were entered in the logbook. It also offers a series of
+      buttons above and below the QSO list to manage the program
+      features. The "QSO List" window has the following features and
+      behavior.</font>
+    <table cellspacing="2" cellpadding="2" border="0" height="379"
+      align="right" width="397">
+      <tbody>
+        <tr>
+          <td align="center" valign="top"><a
+              href="images/QSO_List_Window.png"><img
+                src="images/QSO_List_Window.png" alt=""
+                moz-do-not-send="true" border="0" height="340"
+                width="343"></a></td>
+        </tr>
+        <tr align="center">
+          <td valign="top"><font face="Helvetica, Arial, sans-serif">The
+              QSO List window</font></td>
+        </tr>
+      </tbody>
+    </table>
+    <font face="Helvetica, Arial, sans-serif"><br>
+    </font>
+    <ul>
+      <li><font face="Helvetica, Arial, sans-serif">The QSO List window
+          banner displays the name of the loaded logbook file (file
+          extension removed).<br>
+        </font></li>
+      <li><font face="Helvetica, Arial, sans-serif">A new QSO will
+          always show up at the top of the list, regardless of the
+          sorting criterion previously invoked. This provides an easy
+          way of locating the new QSO in the list.<br>
+        </font></li>
+      <li><font face="Helvetica, Arial, sans-serif">Any QSO can be
+          edited at a later time by executing the following sequence:</font></li>
+    </ul>
+    <ol>
+      <ol>
+        <li><font face="Helvetica, Arial, sans-serif">Select the QSO to
+            be edited from the QSO list content by clicking on the
+            corresponding line.</font></li>
+        <li><font face="Helvetica, Arial, sans-serif">Click on the "Edit
+            QSO" button. This sends the QSO data back to the QSO Capture
+            window for editing.</font></li>
+        <li><font face="Helvetica, Arial, sans-serif">Make the desired
+            changes to the QSO data in the QSO Capture window.</font></li>
+        <li><font face="Helvetica, Arial, sans-serif">Click on the
+            "Update QSO" button to save the modifications, or click on
+            the "Cancel" button to cancel the changes and return the QSO
+            Capture window to the New QSO Capture mode.</font></li>
+      </ol>
+    </ol>
+    <ul>
+      <li><font face="Helvetica, Arial, sans-serif">The QSO List window
+          will show any duplicate QSOs logged in the list with a red
+          font. This provides an easy way to spot duplicates in the QSOs
+          already captured in the logbook.</font></li>
+      <li><font face="Helvetica, Arial, sans-serif">The on-the-fly dupe
+          checker will highlight any potential duplicate QSO in the list
+          with an orange color, as the user types in the new QSO data in
+          the QSO Capture window, and even before the new QSO is saved.<br>
+        </font></li>
+      <li><font face="Helvetica, Arial, sans-serif">The QSO list can be
+          sorted by date/time (latest first), callsign, grid square,
+          radio mode and radio band using the 5 buttons places just
+          above the QSO list.</font></li>
+      <li><font face="Helvetica, Arial, sans-serif">Clicking on a QSO in
+          the QSO list recalls the QSO information back into the QSO
+          Capture window. This allows to quickly save consecutive QSOs
+          with the same station, but on a different grid or band. The
+          Cancel button will clear that QSO data.</font></li>
+      <li><font face="Helvetica, Arial, sans-serif">The QSO list font
+          size can be changed in the Setup Window. See a description of
+          that feature in the Setup window section below.<br>
+        </font></li>
+    </ul>
+    <font face="Helvetica, Arial, sans-serif">Additionally, various
+      buttons are available at the bottom of the QSO List window.<br>
+    </font>
+    <ul>
+      <li><font face="Helvetica, Arial, sans-serif">The "Statistics"
+          button brings up the logbook statistics window. <br>
+        </font></li>
+      <li><font face="Helvetica, Arial, sans-serif">The "Grid Map"
+          button brings up the worked Maidenhead grid square map.</font></li>
+      <li><font face="Helvetica, Arial, sans-serif">The "Open Log"
+          button opens an existing contest logbook file (.VHFlog
+          extension).</font></li>
+      <li><font face="Helvetica, Arial, sans-serif">The "New Log" button
+          clears the logbook list and allows to create a new logbook
+          file. This does not erase any previously-opened logbook file
+          contents.</font></li>
+      <li><font face="Helvetica, Arial, sans-serif">The "Help" button
+          brings up the Help window to display additional information on
+          each function or button.</font></li>
+      <li><font face="Helvetica, Arial, sans-serif">The "About" button
+          brings up the splash screen with program and author
+          information. You can click on the splash screen to get rid of
+          it.</font></li>
+      <li><font face="Helvetica, Arial, sans-serif">The "Setup" button
+          brings up the Setup window to configure various program
+          settings such as the user's callsign and grid square, the
+          contest and the font size for the QSO List.</font></li>
+      <li><font face="Helvetica, Arial, sans-serif">The "Edit QSO"
+          button sends the selected QSO to the QSO Capture window for
+          entry correction.</font></li>
+      <li><font face="Helvetica, Arial, sans-serif">The "Delete QSO"
+          erases the selected QSO from the QSO list. A confirmation of
+          this action is requested via a popup window.<br>
+        </font></li>
+      <li><font face="Helvetica, Arial, sans-serif">The "Delete All
+          QSOs" erases all the QSOs from the QSO list. A confirmation of
+          this action is requested via a popup window.</font></li>
+      <li><font face="Helvetica, Arial, sans-serif">The "Cabrillo File"
+          button produces a Cabrillo-formatted logbook file for
+          submission to the ARRL.</font></li>
+    </ul>
+    <font face="Helvetica, Arial, sans-serif">More information on the
+      action produced by these buttons is available below.<br>
+    </font>
+    <h3><font face="Helvetica, Arial, sans-serif">Grid Map Window</font></h3>
+    <p><font face="Helvetica, Arial, sans-serif">The "Grid Map" window
+        displays the worked Maidenhead grid squares for up to four radio
+        bands using color boxes on a scroll-able world map. The Grid Map
+        window has the following features and behavior.<br>
+      </font></p>
+    <table cellspacing="2" cellpadding="2" border="0" height="431"
+      align="right" width="432">
+      <tbody>
+        <tr align="center">
+          <td valign="top"><a href="images/Grid_Map_Window.png"><img
+                moz-do-not-send="true" src="images/Grid_Map_Window.png"
+                alt="" border="0" height="395" width="386"></a><br>
+          </td>
+        </tr>
+        <tr align="center">
+          <td valign="top"><font face="Helvetica, Arial, sans-serif">The
+              Grid Map window</font></td>
+        </tr>
+      </tbody>
+    </table>
+    <ul>
+      <li><font face="Helvetica, Arial, sans-serif">The world map is
+          available in in x1, x1.5 and x2 zoom levels. The zoom level
+          can be selected via a pull-down list at the bottom of the Grid
+          Map window.</font></li>
+      <li><font face="Helvetica, Arial, sans-serif">Depending on the
+          zoom level, up to four colors are available to display the
+          grid squares worked during the contest. For each color, a pull
+          down list is provided to select which amateur radio band to
+          display. A worked grid square will show up as a colored
+          rectangle contained within the grid square.</font></li>
+      <li><font face="Helvetica, Arial, sans-serif">Due to grid size
+          constraints, the number of bands that can be displayed is
+          limited to two for the x1 zoom level and to three for the x1.5
+          zoom level. The x2 zoom level allows for four bands to be
+          displayed.</font></li>
+      <li><font face="Helvetica, Arial, sans-serif">Moving the map
+          around is as easy as clicking on the map surface and dragging
+          the map within the window. Alternatively, the map can be moved
+          using the vertical and horizontal scroll bars. Note that the </font><br>
+        <font face="Helvetica, Arial, sans-serif"><font face="Helvetica,
+            Arial, sans-serif">Grid Map window can be resized to the
+            user's preference.<br>
+          </font></font></li>
+      <li><font face="Helvetica, Arial, sans-serif">When the software is
+          launched, the world map is loaded into memory even if the </font><font
+          face="Helvetica, Arial, sans-serif"><font face="Helvetica,
+            Arial, sans-serif">Grid Map window is not shown</font>.
+          Depending on how powerful the user's computer is, and
+          depending on which zoom level is selected, it may take more or
+          less time to load the map. During that time, the program's
+          "splash screen" is shown. That loading delay will re-occur
+          whenever the zoom level is changed.</font></li>
+      <li><font face="Helvetica, Arial, sans-serif">The world map
+          projection is "equirectangular", which produces grid squares
+          of identical on-screen size regardless of the latitude. This
+          has the drawback of increasingly distorting the map features
+          as the latitude is increased.<br>
+        </font></li>
+    </ul>
+    <h3><font face="Helvetica, Arial, sans-serif">Statistics Window</font></h3>
+    <ul>
+      <li><font face="Helvetica, Arial, sans-serif">The "Statistics"
+          window displays the contest numbers in real time, as new QSOs
+          are added to the list. The software applies the </font><font
+          face="Helvetica, Arial, sans-serif"><font face="Helvetica,
+            Arial, sans-serif">ARRL rules for calculating the score, and
+            takes into account the time-of-year of the contest (the
+            January contest rules award a higher score to UHF and
+            microwave QSOs).</font></font></li>
+    </ul>
+    <table cellspacing="2" cellpadding="2" border="0" height="274"
+      align="right" width="315">
+      <tbody>
+        <tr align="center">
+          <td valign="top"><a href="images/Statistics_Window.png"><img
+                moz-do-not-send="true"
+                src="images/Statistics_Window.png" alt="" border="0"
+                height="235" width="262"></a><br>
+          </td>
+        </tr>
+        <tr align="center">
+          <td valign="top"><font face="Helvetica, Arial, sans-serif">The
+              Statistics window</font><br>
+          </td>
+        </tr>
+      </tbody>
+    </table>
+    <font face="Helvetica, Arial, sans-serif">&nbsp;</font><font
+      face="Helvetica, Arial, sans-serif">The </font><font
+      face="Helvetica, Arial, sans-serif"><font face="Helvetica, Arial,
+        sans-serif">Statistics </font>window displays the following
+      metrics: </font>
+    <ul>
+      <li><font face="Helvetica, Arial, sans-serif">The number of
+          completed QSOs, <br>
+        </font></li>
+      <li><font face="Helvetica, Arial, sans-serif">The number of worked
+          grid squares, <br>
+        </font></li>
+      <li><font face="Helvetica, Arial, sans-serif">The number of worked
+          radio bands, <br>
+        </font></li>
+      <li><font face="Helvetica, Arial, sans-serif">The QSO points, <br>
+        </font></li>
+      <li><font face="Helvetica, Arial, sans-serif">The multipliers,<br>
+        </font></li>
+      <li><font face="Helvetica, Arial, sans-serif">The total score.
+          This is the metric that counts in the end!</font></li>
+    </ul>
+    <font face="Helvetica, Arial, sans-serif">Note:&nbsp; In order for
+      the software to calculate an accurate contest score, the right
+      contest (January, June or September) must be selected in the Setup
+      window.<br>
+    </font>
+    <h3><font face="Helvetica, Arial, sans-serif">Setup Window</font><br>
+    </h3>
+    <ul>
+    </ul>
+    <font face="Helvetica, Arial, sans-serif">The "Setup" window</font><font
+      face="Helvetica, Arial, sans-serif"> allows the user to provide
+      the following information and make settings adjustments:<br>
+    </font>
+    <table cellspacing="2" cellpadding="2" border="0" height="218"
+      align="right" width="242">
+      <tbody>
+        <tr align="center">
+          <td valign="top"><a href="images/Setup_Window.png"><img
+                moz-do-not-send="true" src="images/Setup_Window.png"
+                alt="" border="0" height="182" width="183"></a><br>
+          </td>
+        </tr>
+        <tr align="center">
+          <td valign="top"><font face="Helvetica, Arial, sans-serif">The
+              Setup window</font></td>
+        </tr>
+      </tbody>
+    </table>
+    <font face="Helvetica, Arial, sans-serif"><br>
+    </font>
+    <ul>
+      <li><font face="Helvetica, Arial, sans-serif">A pull-down list is
+          provided to select the current ARRL contest, allowing the
+          software software to produce an accurate score calculation.</font></li>
+      <li><font face="Helvetica, Arial, sans-serif">The user's callsign
+          and grid square can be filled in in two separate entry boxes.
+          These are used to produce the Cabrillo format file.</font></li>
+      <li><font face="Helvetica, Arial, sans-serif">A slider is provided
+          to adjust the QSO list font size to the user's preference.</font></li>
+    </ul>
+    <font face="Helvetica, Arial, sans-serif">Note that while the Setup
+      window is shown, all other windows are disabled. The user must
+      close the Setup window to return to normal software operation.<br>
+    </font>
+    <h3><font face="Helvetica, Arial, sans-serif">Other Features<br>
+      </font></h3>
+    <ul>
+      <li><font face="Helvetica, Arial, sans-serif">The software saves
+          the logbook as a simple </font><font face="Helvetica, Arial,
+          sans-serif"><font face="Helvetica, Arial, sans-serif">CSV
+            (comma-separated text) </font>ASCII text file .The logbook
+          file can be manually consulted and edited using an ASCII text
+          editor if ever needed. However, the original formatting must
+          be maintained for the software to properly run.<br>
+        </font></li>
+      <li><font face="Helvetica, Arial, sans-serif">Before any change is
+          made to the QSO list (and to the logbook file), the software
+          makes a backup copy of the logbook file (the file has a
+          .VHFlog.bak file extension). This becomes the operator's
+          "undo" solution in case of a major error from his part, or a
+          computer system fault. Note that the backup file is
+          overwritten whenever a QSO is added, erased or edited. <br>
+        </font></li>
+      <li><font face="Helvetica, Arial, sans-serif">The program
+          generates a Cabrillo format contest results submission file.
+          Within that file, the user merely fills in the header part
+          using any ASCII test editor. Then the file can be
+          electronically submitted to the ARRL. Note that the user's
+          callsign and grid square are required to be filled in in the
+          Setup window prior to generating the Cabrillo file.<br>
+        </font></li>
+      <li><font face="Helvetica, Arial, sans-serif">When exiting the
+          software, the most common program settings are saved in a
+          configuration file named, config.sav). They are retrieved at
+          the next program launch. In other words, quitting and then
+          re-launching the program will bring back the same
+          configuration (loaded contest file, QSO list, windows
+          positions and sizes, operator's callsign and grid square,
+          etc.). If for any reason the configuration file gets
+          corrupted, it may cause software errors and misbehavior. When
+          this happens, it is recommended to simply delete the
+          config.sav file, launch the software again and reconfigure it
+          as if it was the first time that the software is run. This
+          obviously will have no effect on the logbook files' integrity.<br>
+        </font></li>
+    </ul>
+    <font face="Helvetica, Arial, sans-serif"></font>
+    <ul>
+    </ul>
+    <font face="Helvetica, Arial, sans-serif"> </font> <font
+      face="Helvetica, Arial, sans-serif"> </font>
+    <h2 class="western"><font face="Helvetica, Arial, sans-serif">Prerequisites
+
+
+
+
+
+
+
+
+
+
+
+        and Installation<br>
+      </font></h2>
+    <font face="Helvetica, Arial, sans-serif"> </font>
+    <ul>
+    </ul>
+    <font face="Helvetica, Arial, sans-serif">This software is
+      non-invasive:</font>
+    <ul>
+      <ul>
+      </ul>
+      <li><font face="Helvetica, Arial, sans-serif">Everything happens
+          in the local directory and sub-directories where the python
+          script is located.</font></li>
+      <li><font face="Helvetica, Arial, sans-serif">No Windows registry
+          writes are deliberately performed by the software. No Windows
+          environment variables are modified or added.</font></li>
+    </ul>
+    <font face="Helvetica, Arial, sans-serif">The ARRL VHF Contest
+      Logger software is contained in a single folder that can be
+      downloaded from GitHub. Simply decompress the downloaded .zip file
+      to a suitable disk location of your choice.<br>
+      <br>
+      Since the software is a Python 3 script, the Python 3 interpreter
+      must be already installed on the computer in order to to run this
+      software. The Python 3 installation procedure differs depending on
+      which operating system the program is executed in.<br>
+    </font>
+    <ul>
+      <ul>
+      </ul>
+    </ul>
+    <h3 class="western"><font face="Helvetica, Arial, sans-serif">Python
+        3 Installation<br>
+      </font></h3>
+    <h4>Windows Systems<br>
+    </h4>
+    If your computer has Windows 10 running, and is up-to-date, the
+    easiest way to install Python 3 (including IDLE) is through the
+    Microsoft store. Select the latest available stable release of
+    Python 3 (3.9 at the time of writing this).<br>
+    &nbsp;<br>
+    For other Windows versions, or if your Windows 10 system is not
+    up-to-date, the Python 3 interpreter can be installed by downloading
+    the proper Windows installer (select either 32-bit or 64-bit version
+    based on your current Windows installation) from <a
+      moz-do-not-send="true"
+      href="https://www.python.org/downloads/windows/">https://www.python.org/downloads/windows/</a>,
+    and by running the downloaded installation executable file.<br>
+    <br>
+    Everything that is needed to run the <font face="Helvetica, Arial,
+      sans-serif">VHF Contest Logger </font>software is included with
+    this Python 3 installation. No other 3rd party libraries are
+    required when installing on Windows.
+    <h4 class="western"><font face="Helvetica, Arial, sans-serif">Linux
+        Systems</font></h4>
+    <h5>Python 3<br>
+    </h5>
+    <p><u>The most recent major Linux distributions include Python 3</u>.
+      To verify its presence, type the following command at the command
+      prompt:<br>
+      <font face="Courier New, Courier, monospace">&nbsp;&nbsp;&nbsp; <font
+          color="#666666">$</font> <font color="#3333ff">ls
+          /usr/bin/python*</font><br>
+        <font face="Helvetica, Arial, sans-serif">The terminal should
+          display the installed Python version executables:</font><br>
+        <font color="#3333ff">&nbsp;&nbsp;&nbsp;
+          /usr/bin/python&nbsp;&nbsp;&nbsp;&nbsp;
+          /usr/bin/python3&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
+
+          /usr/bin/python3-config<br>
+          &nbsp;&nbsp;&nbsp; /usr/bin/python2&nbsp;&nbsp;&nbsp;
+          /usr/bin/python3.8<br>
+          &nbsp;&nbsp;&nbsp; /usr/bin/python2.7&nbsp;
+          /usr/bin/python3.8-config</font><br>
+        <font face="Helvetica, Arial, sans-serif">In this example, the
+          systems has both python 2.7 and python 3.8 already installed.<br>
+          <br>
+          If your Linux distribution does not offer Python 3
+          pre-installed, you can install it like any major software: <br>
+        </font></font></p>
+    <ul>
+      <li><font face="Courier New, Courier, monospace"><font
+            face="Helvetica, Arial, sans-serif">Using the built-in Linux
+            software installer, Synaptic, or such built-in tool, the
+            Python 3 installation should be easy.</font></font></li>
+      <li><font face="Courier New, Courier, monospace"><font
+            face="Helvetica, Arial, sans-serif">Alternatively, you can
+            issue the standard installation command that your system
+            supports, examples being:<br>
+          </font></font><font face="Courier New, Courier, monospace"><font
+            color="#666666">~$</font> <font color="#3333ff">sudo
+            apt-get install python3&nbsp; <font color="#000000"
+              face="Helvetica, Arial, sans-serif">for Debian-based
+              distributions (Debian/Ubuntu/Linux Mint, etc.)</font>.<br>
+          </font></font><font face="Courier New, Courier, monospace"><font
+            color="#666666">~$</font> <font color="#3333ff">sudo dnf
+            install python3&nbsp; </font></font><font face="Courier
+          New, Courier, monospace"><font color="#3333ff"><font
+              color="#000000" face="Helvetica, Arial, sans-serif">for
+              Fedora distributions.<br>
+              <font color="#666666">~$</font>&nbsp; <font
+                color="#3333ff" face="Courier New, Courier, monospace">sudo
+
+                yum install python3&nbsp; </font>for Redhat/RHEL/CentOS
+              distributions.</font></font></font></li>
+    </ul>
+    <h5><font face="Courier New, Courier, monospace"><font
+          color="#3333ff"><font color="#000000" face="Helvetica, Arial,
+            sans-serif">Tkinter library</font></font></font></h5>
+    <u>The Linux installation of Python 3 </u><u>will likely not
+      include the TKinter library</u>, which produces the windows and
+    buttons created by the <font face="Helvetica, Arial, sans-serif">VHF
+
+      Contest Logger </font>software. If that is the case, you will get
+    the "ImportError: No module named 'tkinter'" error message when
+    trying to run the program. To install Tkinter for Python 3, issue
+    the following command:<font face="Courier New, Courier, monospace"><br>
+      &nbsp;&nbsp;&nbsp; <font color="#666666">~$</font> <font
+        color="#3333ff">sudo apt-get install python3-tk&nbsp; <font
+          color="#000000" face="Helvetica, Arial, sans-serif">for
+          Debian-based distributions (Debian/Ubuntu/Linux Mint, etc.)</font>.<br>
+      </font></font><font face="Courier New, Courier, monospace">&nbsp;&nbsp;&nbsp;
+
+      <font color="#666666">~$</font> <font color="#3333ff">sudo dnf
+        install python3-tk</font></font><font face="Courier New,
+      Courier, monospace"><font color="#3333ff">&nbsp; </font></font><font
+      face="Courier New, Courier, monospace"><font color="#3333ff"><font
+          color="#000000" face="Helvetica, Arial, sans-serif">for Fedora
+          distributions.<br>
+          <font face="Courier New, Courier, monospace">&nbsp;&nbsp;&nbsp;
+
+            <font color="#666666">~$</font> <font color="#3333ff">sudo
+              yum install </font></font></font></font></font><font
+      face="Courier New, Courier, monospace"><font color="#3333ff"><font
+          color="#000000" face="Helvetica, Arial, sans-serif"><font
+            color="#3333ff" face="Courier New, Courier, monospace"><font
+              color="#3333ff">python3-tk</font>&nbsp; </font>for
+          Redhat/RHEL/CentOS distributions.</font></font></font>
+    <h4><font face="Helvetica, Arial, sans-serif">MacOS</font></h4>
+    <font face="Helvetica, Arial, sans-serif">Although it has not been
+      tested, the software should also run properly on the MacOS once
+      the installation of Python 3 is performed. Like with a Windows
+      installation, the TKinter library is included. Follow the Python 3
+      installation instructions given here:</font><font face="Helvetica,
+      Arial, sans-serif"> <a moz-do-not-send="true"
+        href="https://www.python.org/download/mac/tcltk/">https://www.python.org/download/mac/tcltk/</a><br>
+      <br>
+    </font>
+    <h2><font face="Helvetica, Arial, sans-serif">Running the </font><font
+        face="Helvetica, Arial, sans-serif"><font face="Helvetica,
+          Arial, sans-serif">VHF Contest Logger </font>software</font></h2>
+    <p>The best way to launch the software is to invoke it from the
+      command prompt. There are alternatives for launching the software,
+      such as double-clicking on the python script or running it within
+      the Python IDLE environment, but the results are not guaranteed.<br>
+    </p>
+    <h3>Windows Systems</h3>
+    <p>Open a Command Prompt window and "cd" (change directory) to the
+      directory where the VHF Contest Logger software is located (where
+      you have unzipped the GitHub file). For example:<br>
+      <font face="Helvetica, Arial, sans-serif"><font face="Courier New,
+          Courier, monospace"><font color="#666666">&nbsp;&nbsp;&nbsp;
+            C:\Users\me&gt;</font> <font color="#3333ff">cd \</font></font></font><font
+        face="Helvetica, Arial, sans-serif"><font color="#3333ff"
+          face="Courier New, Courier, monospace"><font face="Helvetica,
+            Arial, sans-serif"><font face="Courier New, Courier,
+              monospace">software</font></font>\QSO_Logger</font><br>
+        Then launch the program by typing the following command at the
+        prompt:</font><font face="Helvetica, Arial, sans-serif"><br>
+        <font face="Courier New, Courier, monospace"><font
+            color="#666666">&nbsp;&nbsp;&nbsp;
+            C:\software\QSO_Logger&gt;</font> <font color="#3333ff">python3
+
+            VHF_Contest_QSO_Logger.py<br>
+            <font color="#000000" face="Helvetica, Arial, sans-serif">Note
+
+              that on some Windows installations, the command to launch
+              the program may be different, "py" instead of "python3":<br>
+            </font></font></font></font><font face="Helvetica, Arial,
+        sans-serif"><font face="Courier New, Courier, monospace"><font
+            color="#3333ff"><font face="Helvetica, Arial, sans-serif"><font
+                face="Courier New, Courier, monospace"><font
+                  color="#666666">&nbsp;&nbsp;&nbsp;
+                  C:\software\QSO_Logger&gt;</font> <font
+                  color="#3333ff"><b>py</b> VHF_Contest_QSO_Logger.py<br>
+                </font></font></font></font></font></font></p>
+    <p><font face="Helvetica, Arial, sans-serif"><font face="Courier
+          New, Courier, monospace"><font color="#3333ff"><font
+              face="Helvetica, Arial, sans-serif"><font face="Courier
+                New, Courier, monospace"><font color="#3333ff"><font
+                    color="#000000" face="Helvetica, Arial, sans-serif">The
+                    software was tested in Windows 7 32-bit and Windows
+                    10 64-bit environments.</font><br>
+                </font></font></font></font></font></font></p>
+    <h3 class="western"><font face="Helvetica, Arial, sans-serif">Linux
+        Systems</font></h3>
+    <p>Open a Command Prompt window and "cd" (change directory) to the
+      directory where the VHF Contest Logger software is located (where
+      you have unzipped the GitHub file). For example:<br>
+      <font face="Helvetica, Arial, sans-serif"><font face="Courier New,
+          Courier, monospace"><font color="#666666">&nbsp;&nbsp;&nbsp;
+            ~$</font> <font color="#3333ff">cd </font></font></font><font
+        face="Helvetica, Arial, sans-serif"><font color="#3333ff"
+          face="Courier New, Courier, monospace"><font face="Helvetica,
+            Arial, sans-serif"><font face="Courier New, Courier,
+              monospace">software/</font></font>QSO_Logger</font><br>
+        Then launch the program by typing the following command at the
+        prompt:</font><font face="Helvetica, Arial, sans-serif"><br>
+        <font face="Courier New, Courier, monospace"><font
+            color="#666666">&nbsp;&nbsp;&nbsp; ~/software/QSO_Logger$</font>
+          <font color="#3333ff">python3 VHF_Contest_QSO_Logger.py<br>
+            <font color="#000000" face="Helvetica, Arial, sans-serif">Note
+
+              that on some Windows installations, the command to launch
+              the program may be different, "py" instead of "python3":<br>
+              &nbsp; </font></font></font></font><font face="Helvetica,
+        Arial, sans-serif"><font face="Courier New, Courier, monospace"><font
+            color="#3333ff"><font face="Helvetica, Arial, sans-serif"><font
+                face="Courier New, Courier, monospace"><font
+                  color="#666666"><font face="Helvetica, Arial,
+                    sans-serif"><font face="Courier New, Courier,
+                      monospace"><font color="#666666">&nbsp;&nbsp; ~</font></font></font>/software/QSO_Logger$</font>
+                <font color="#3333ff"><b>py</b>
+                  VHF_Contest_QSO_Logger.py<br>
+                </font></font></font></font></font></font></p>
+    <p><font face="Helvetica, Arial, sans-serif">The software was tested
+        in Xubuntu 20.04 64-bit and in Lubuntu 18.04 64-bit
+        environments.</font><br>
+    </p>
+    <ul>
+    </ul>
+    <h2 class="western"><font face="Helvetica, Arial, sans-serif">Legal
+        Notice</font></h2>
+    <font face="Helvetica, Arial, sans-serif"> </font>
+    <p style="margin-bottom: 0in; line-height: 100%"><font
+        face="Helvetica, Arial, sans-serif">This software, along with
+        all accompanying files and scripts, is free software: you can
+        redistribute it and/or modify it under the terms of the GNU
+        General Public License as published by the Free Software
+        Foundation, either version 3 of the License, or any later
+        version. This program is distributed in the hope that it will be
+        useful, but WITHOUT ANY WARRANTY; without even the implied
+        warranty of MERCHANTABILITY or FITNESS FOR A PARTICULAR
+        PURPOSE.&nbsp; See the GNU General Public License for more
+        details. You should have received a copy of the GNU General
+        Public License along with this program.&nbsp; If not, see
+        &lt;https://www.gnu.org/licenses/&gt;. When modifying the
+        software, a mention of the original author, namely Bert-VE2ZAZ,
+        would be a gracious consideration.<br>
+      </font></p>
+  </body>
+</html>
