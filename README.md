@@ -12,4 +12,4 @@ Please see the [Help.html](http://htmlpreview.github.io/?https://github.com/VE2Z
 ### Legal Notice
 This software, along with all accompanying files and scripts, is free software: you can redistribute it and/or modify it under the terms of the GNU General Public License as published by the Free Software Foundation, either version 3 of the License, or any later version. This program is distributed in the hope that it will be useful, but WITHOUT ANY WARRANTY; without even the implied warranty of MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU General Public License for more details. You should have received a copy of the GNU General Public License along with this program.  If not, see <https://www.gnu.org/licenses/>. When modifying the software, a mention of the original author, namely Bert-VE2ZAZ, would be a gracious consideration.
 
-Note: This text is extracted from the "About.html" file (and from the "Images" directory) provided with this software.
+Note: This text is extracted from the "Help.html" file (and from the "Images" directory) provided with this software.
