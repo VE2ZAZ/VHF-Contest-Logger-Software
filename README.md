@@ -1,5 +1,5 @@
 # ARRL VHF Contest Logger Software
-### By Bert, VE2ZAZ (http://ve2zaz.net)
+### By Bert, VE2ZAZ (https://ve2zaz.net)
 
 ![The VHF Contest Logger software windows](/images/All_Windows.png "The VHF Contest Logger software windows")
 
