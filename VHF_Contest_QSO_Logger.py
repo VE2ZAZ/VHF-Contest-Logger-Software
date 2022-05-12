@@ -13,6 +13,21 @@
 #  either version 3 of the License, or any later version. see https://www.gnu.org/licenses/ . When modifying the
 #  software, a mention of the original author, namely Bert-VE2ZAZ, would be a gracious consideration.
     
+# Release History
+#  - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
+# Version 1.1 (May 2022):
+# - In the QSO Capture window, corrected the date value to update based on UTC time, not on local time.
+# - In the Grid Map window, added Distance Circle and Azimuth Line display options, along with associated checkboxes.
+# - In the setup menu: 
+#   - Now converts operator's call sign and grid square to uppercase.
+#   - Now supports the operator's gridsquare in 6-character format, allowing for better location accuracy on the gridsquare map.
+#   - Now checks the operator's gridsquare for proper format (2-chars/2-digits/2-chars).
+#  - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
+# Version 1.0 (July 2021):
+# - Initial release.    
+#  - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
+
+    
 # L_I_B_R_A_R_Y  I_M_P_O_R_T_S
 
 from tkinter import *       # Allows the creation of windows and widgets
@@ -25,10 +40,13 @@ import os.path
 from shutil import copy
 from tkinter.scrolledtext import ScrolledText       # A textbox that cans scroll
 import re       # Allows to split using several delimiters for splitting strings
+import math
+sys.path.append("./great_circle_calculator")
+import great_circle_calculator as gcc
 
 # C_O_N_S_T_A_N_T_S
 
-SW_VERSION = " 1.0  05/07/2021"
+SW_VERSION = " 1.1  15/05/2022"
 DATE_POS = 0
 TIME_POS = 1
 BAND_POS = 2
@@ -580,7 +598,7 @@ def update_datetime_and_misc():
     global Stop_DateTime_Updates
     # Update date and time in the QSO entry fields
     if not Stop_DateTime_Updates:
-        Date_Entry_Val.set(datetime.date.today())
+        Date_Entry_Val.set(datetime.datetime.utcnow().strftime('%Y-%m-%d'))
         Time_Entry_Val.set(datetime.datetime.utcnow().strftime('%H%M'))
     # Update QSO edit and delete buttons state (disabled if no QSO is selected in list, enabled otherwise)
     if (len(QSO_Listbox.curselection()) == 0):  # Checks if a line is selected
@@ -646,6 +664,24 @@ def settings_button_clicked():
     global Own_Callsign
     global Own_Gridsquare
     global Contest_Name
+    
+    #Converts the operator's grid square to uppercase. Also checks whether the 2-letter/2digits/2-letter grid square format is met
+    def validate_setup_gridsquare(event):
+        Own_Gridsquare_Entry_Val.set(Own_Gridsquare_Entry_Val.get().upper())
+        if len(Own_Gridsquare_Entry_Val.get()) > 6: Own_Gridsquare_Entry_Val.set(Own_Gridsquare_Entry_Val.get()[:-1])
+        GridSquare_Breakdown_List = list(Own_Gridsquare_Entry_Val.get())
+        if (len(GridSquare_Breakdown_List) == 1):
+            Own_Gridsquare_Entry_Val.set(re.sub('[^A-Z]', '', GridSquare_Breakdown_List[0]))
+        elif (len(GridSquare_Breakdown_List) == 2):
+            Own_Gridsquare_Entry_Val.set(re.sub('[^A-Z]', '', GridSquare_Breakdown_List[0] + GridSquare_Breakdown_List[1]))
+        elif (len(GridSquare_Breakdown_List) == 3):
+            Own_Gridsquare_Entry_Val.set(re.sub('[^A-Z]', '', GridSquare_Breakdown_List[0] + GridSquare_Breakdown_List[1]) + re.sub('[^0-9]', '', GridSquare_Breakdown_List[2]))
+        elif (len(GridSquare_Breakdown_List) == 4):
+            Own_Gridsquare_Entry_Val.set(re.sub('[^A-Z]', '', GridSquare_Breakdown_List[0] + GridSquare_Breakdown_List[1]) + re.sub('[^0-9]', '', GridSquare_Breakdown_List[2] + GridSquare_Breakdown_List[3]))
+        elif (len(GridSquare_Breakdown_List) == 5):
+            Own_Gridsquare_Entry_Val.set(re.sub('[^A-Z]', '', GridSquare_Breakdown_List[0] + GridSquare_Breakdown_List[1]) + re.sub('[^0-9]', '', GridSquare_Breakdown_List[2] + GridSquare_Breakdown_List[3]) + re.sub('[^A-Z]', '', GridSquare_Breakdown_List[4]))
+        elif (len(GridSquare_Breakdown_List) == 6):
+            Own_Gridsquare_Entry_Val.set(re.sub('[^A-Z]', '', GridSquare_Breakdown_List[0] + GridSquare_Breakdown_List[1]) + re.sub('[^0-9]', '', GridSquare_Breakdown_List[2] + GridSquare_Breakdown_List[3]) + re.sub('[^A-Z]', '', GridSquare_Breakdown_List[4] + GridSquare_Breakdown_List[5]))
 
     def update_qso_font_size(self):
         QSO_Listbox.configure(font=("Consolas", Font_Size_Scale_Val.get(), "")) # Font_Size_Scale_Val.get()
@@ -658,13 +694,21 @@ def settings_button_clicked():
     def validate_settings_info(event):
         global Own_Callsign 
         global Own_Gridsquare
-        Own_Callsign = Own_Callsign_Entry_Val.get()
-        Own_Gridsquare = Own_Gridsquare_Entry_Val.get()
-
+        Own_Callsign = Own_Callsign_Entry_Val.get().upper()
+        
     def validate_contest_combobox(index, value, op):
         global Contest_Name
         Contest_Name = Contest_Select_Combo_Val.get()
 
+    def settings_window_exit():
+        global Own_Gridsquare
+        Own_Callsign = Own_Callsign_Entry_Val.get().upper()
+        Own_Gridsquare = Own_Gridsquare_Entry_Val.get()
+        Settings_Window.withdraw()
+        Settings_Window.grab_release()
+        update_grid_boxes_no_event()
+        Grid_Map_Window.update()
+        
     # Open dialog
     Settings_Window = Toplevel(QSO_List_Window)
     Settings_Window.title("VCL - Settings")     
@@ -673,6 +717,7 @@ def settings_button_clicked():
     Settings_Window.resizable(0, 0) # Makes Log entry window size fixed
     Settings_Window.iconphoto(True, PhotoImage(file = "./images/VCL_Icon_350x350.png"))  # Only accepts .PNG files
     Settings_Window.grab_set()
+    Settings_Window.protocol('WM_DELETE_WINDOW',settings_window_exit) 
 
     Contest_Select_Label = Label(Settings_Window,text="VHF Contest", bg = Default_BG_Color)
     Contest_Select_Label.place(x=10,y=10)
@@ -703,10 +748,10 @@ def settings_button_clicked():
     Own_Gridsquare_Entry_Val = StringVar(Settings_Window)      
     if Own_Gridsquare != "": Own_Gridsquare_Entry_Val.set(Own_Gridsquare)
     Own_Gridsquare_Entry = Entry(Settings_Window, textvariable=Own_Gridsquare_Entry_Val)  
-    Own_Gridsquare_Entry.bind("<KeyRelease>", validate_settings_info)
+    Own_Gridsquare_Entry.bind("<KeyRelease>", validate_setup_gridsquare)
     Own_Gridsquare_Entry.configure(width=10)
     Own_Gridsquare_Entry.pack()
-    create_hint(Own_Gridsquare_Entry,"Your callsign and gridsquare are required for Cabrillo file generation.")
+    create_hint(Own_Gridsquare_Entry,"Your callsign and gridsquare are required for Cabrillo file generation and location mapping. Entering a six-character gridsquare will give better location accuracy on the grid map.")
 
     Font_Size_Label = Label(Settings_Window,text="QSO List Font Size", bg = Default_BG_Color)
     Font_Size_Label.pack(pady = (8,0))
@@ -1012,6 +1057,14 @@ create_hint(Map_Canvas,"""Shows the worked amateur radio bands for each Maidenhe
 Wait_For_Loading_Label = Label(Map_Canvas, text="Map is loading. Please wait...", bg = Default_BG_Color,font="Verdana 14")
 Wait_For_Loading_Label.pack(expand=True, fill=None) 
 
+# Draws a dot at the operator's location on the Worked Gridsquare map
+def create_qth_dot(x, y, r, canvasName): #center coordinates, radius
+    x0 = x - r
+    y0 = y - r
+    x1 = x + r
+    y1 = y + r
+    return canvasName.create_oval(x0, y0, x1, y1,fill = "red",outline = "blue", tags='Distance_Azimuth')
+
 # Updates the worked grid color boxes on the map
 def update_grid_boxes(event):
     global QSO_List
@@ -1020,6 +1073,9 @@ def update_grid_boxes(event):
     global Map_Height
     global Map_Scale_Factor
     global Default_BG_Color
+    global Distances_Checkbutton_Val
+    global Own_Gridsquare_X
+    global Own_Gridsquare_Y
     
     Map_Canvas.delete('Color_Boxes')
     # Band 1 color rectangles
@@ -1083,11 +1139,59 @@ def update_grid_boxes(event):
                                           outline='cyan', fill = '', width=3, tags='Color_Boxes',stipple="gray50") #
         else:
             Band4_Combo.pack_forget()
-            Band4_frame.config(bg=Default_BG_Color,relief=FLAT)        
+            Band4_frame.config(bg=Default_BG_Color,relief=FLAT)
+    if (Azimuth_Checkbutton_Val.get() == 1) or (Distances_Checkbutton_Val.get() == 1):
+        create_qth_dot(Own_Gridsquare_X,Own_Gridsquare_Y,5,Map_Canvas)
+    Grid_Map_Window.update()
 
 # Is used to call the grid box updates when no event is passed.
 def update_grid_boxes_no_event():
     update_grid_boxes("")
+
+
+def draw_dist_and_az_lines():
+    global Map_Height
+    global Lat_Grid_Pitch
+    global Long_Grid_Pitch
+    global Own_Gridsquare_X
+    global Own_Gridsquare_Y
+    # Add the distance circles and azimuth lines
+    Map_Canvas.delete('Distance_Azimuth')
+    Own_Gridsquare_X = 10 * (ord(Own_Gridsquare[0]) - 65) * Long_Grid_Pitch
+    Own_Gridsquare_X = Own_Gridsquare_X + ((ord(Own_Gridsquare[2]) - 48) * Long_Grid_Pitch)     
+    if len(Own_Gridsquare) == 6: Own_Gridsquare_X = Own_Gridsquare_X + round((ord(Own_Gridsquare[4]) - 65) * Long_Grid_Pitch/24)
+    else: Own_Gridsquare_X = Own_Gridsquare_X + 0.5 * Long_Grid_Pitch
+    Own_Gridsquare_Y = Map_Height - (10 * (ord(Own_Gridsquare[1]) - 65) * Lat_Grid_Pitch)
+    Own_Gridsquare_Y = Own_Gridsquare_Y - ((ord(Own_Gridsquare[3]) - 48) * Lat_Grid_Pitch) # - 0.5 * Lat_Grid_Pitch
+    if len(Own_Gridsquare) == 6: Own_Gridsquare_Y = Own_Gridsquare_Y - round((ord(Own_Gridsquare[5]) - 65) * Lat_Grid_Pitch/24)
+    else: Own_Gridsquare_Y = Own_Gridsquare_Y - 0.5 * Lat_Grid_Pitch
+    lat_km_per_pixel = 180 * 111 / Map_Height  # 111 kilometers per degree of latitude
+    if (Azimuth_Checkbutton_Val.get() == 1) or (Distances_Checkbutton_Val.get() == 1):
+        Circle_Point_Pix_List = []  
+        for j in range(0,11):  # The number of points by 500 km increments
+            for i in range(0,120):  # 3 degree increments, so 120 points per circle
+                (Circle_Point_Deg_Lon, Circle_Point_Deg_Lat) = gcc.point_given_start_and_bearing((-180 + 2*Own_Gridsquare_X/Long_Grid_Pitch, 90 - Own_Gridsquare_Y/Lat_Grid_Pitch), i*3 , j * 500 * 1000, unit='meters') # This unpacks the (long,lat) tuple                
+                Circle_Point_Pix_List.append([round(Map_Height*2/2 + Circle_Point_Deg_Lon * Map_Height*2/360), round(Map_Height/2 - Circle_Point_Deg_Lat * Map_Height/180)])   # Draws a distance circle every 500 km
+                if i in range(1,360) and (Distances_Checkbutton_Val.get() == 1):
+                    Map_Canvas.create_line(Circle_Point_Pix_List[120*j+i-1][0], Circle_Point_Pix_List[120*j+i-1][1], Circle_Point_Pix_List[120*j+i][0], Circle_Point_Pix_List[120*j+i][1], fill="dark orange", width=1, dash=(5,5), tags='Distance_Azimuth')
+                if (i in range(0,360,5)) and (j in range(1,11) and (Azimuth_Checkbutton_Val.get() == 1)):  # Draws an azimuth line every 15 degrees
+                    Map_Canvas.create_line(Circle_Point_Pix_List[120*j+i-120][0], Circle_Point_Pix_List[120*j+i-120][1], Circle_Point_Pix_List[120*j+i][0], Circle_Point_Pix_List[120*j+i][1], fill="red", width=1, dash=(5,5), tags='Distance_Azimuth')
+        # Now draw labels over the lines
+        if (Distances_Checkbutton_Val.get() == 1):
+            for j in (2,4,6,8,10):  
+                for i in range(3,120,15):   
+                    canvas_text = Map_Canvas.create_text(Circle_Point_Pix_List[120*j+i][0], Circle_Point_Pix_List[120*j+i][1], text=j*500, font = "Verdana 7", anchor="center", fill="dark orange", tags='Distance_Azimuth')
+                    bgnd_box=Map_Canvas.create_rectangle(Map_Canvas.bbox(canvas_text),fill="white", outline="white", tags='Distance_Azimuth')
+                    Map_Canvas.tag_lower(bgnd_box,canvas_text)
+        if (Azimuth_Checkbutton_Val.get() == 1):
+            for j in (2,4,6,8,10):  
+                for i in range(0,120,10):   
+                    canvas_text = Map_Canvas.create_text(Circle_Point_Pix_List[120*j+i][0] - (Circle_Point_Pix_List[120*j+i][0]-Circle_Point_Pix_List[120*(j-1)+i][0])/2, Circle_Point_Pix_List[120*j+i][1] - (Circle_Point_Pix_List[120*j+i][1]-Circle_Point_Pix_List[120*(j-1)+i][1])/2, text=i*3, font = "Verdana 7", anchor="center", fill="red", tags='Distance_Azimuth')
+                    bgnd_box=Map_Canvas.create_rectangle(Map_Canvas.bbox(canvas_text),fill="white", outline="white", tags='Distance_Azimuth')
+                    Map_Canvas.tag_lower(bgnd_box,canvas_text)
+    if (Azimuth_Checkbutton_Val.get() == 1) or (Distances_Checkbutton_Val.get() == 1):
+        create_qth_dot(Own_Gridsquare_X,Own_Gridsquare_Y,5,Map_Canvas)
+    Grid_Map_Window.update()
 
 # Now add the band color selection comboboxes to the World Grid map window
 
@@ -1150,10 +1254,26 @@ World_Scale_Combo = ttk.Combobox(World_Scale_frame, width = 3, textvariable=Worl
 World_Scale_Combo['values'] = ('1','1.5','2')
 World_Scale_Combo['state'] = 'readonly'
 World_Scale_Combo.set("1")
-World_Scale_Combo.pack(side=RIGHT,expand=False,fill=BOTH, padx=1, pady=2)  #,expand=True,fill=BOTH
-World_Scale_Label.pack(side=RIGHT,expand=False,fill=BOTH, padx=5, pady=2)
+World_Scale_Combo.pack(side=RIGHT,expand=False,fill=BOTH, padx=4, pady=2)  #,expand=True,fill=BOTH
+World_Scale_Label.pack(side=RIGHT,expand=False,fill=BOTH, padx=3, pady=2)
 create_hint(World_Scale_Combo,"Allows to select which scale factor (x1, x1.5 and x2) to use for displaying the world map. A new scale selection may take a moment to take effect.")
 
+#Creating the "Display Distance circles" checkmark
+Distances_frame = Frame(Grid_Map_Window, relief=RAISED, borderwidth=1)
+Distances_frame.pack(side=LEFT, expand=False)
+Distances_Checkbutton_Val = IntVar(Distances_frame)
+Distances_Checkbutton = Checkbutton(Distances_frame, text='Distances (Km)',variable=Distances_Checkbutton_Val, onvalue=1, offvalue=0, command=draw_dist_and_az_lines)
+Distances_Checkbutton.pack(side=RIGHT,expand=False,fill=BOTH, padx=7, pady=2)
+create_hint(Distances_Checkbutton,"Displays distance circles centered on your station location in increments of 500 kilometers")
+
+#Creating the "Azimuth Lines" checkmark
+Azimuth_frame = Frame(Grid_Map_Window, relief=RAISED, borderwidth=1)
+Azimuth_frame.pack(side=LEFT, expand=False)
+Azimuth_Checkbutton_Val  = IntVar(Azimuth_frame)
+Azimuth_Checkbutton = Checkbutton(Azimuth_frame, text='Azimuths',variable=Azimuth_Checkbutton_Val, onvalue=1, offvalue=0, command=draw_dist_and_az_lines)
+Azimuth_Checkbutton.pack(side=RIGHT,expand=False,fill=BOTH, padx=7, pady=2)
+create_hint(Azimuth_Checkbutton,"Displays azimuth lines centered on your station location in increments of 15 degrees")
+        
 # (Re)draws the World Grid map and restores the center map position to the same position after scaling
 def draw_map(event):
     global Lat_Grid_Pitch
@@ -1163,6 +1283,7 @@ def draw_map(event):
     global Map_Scale_Factor
     global Map_Height
     global World_Filename   # This is required otherwisew the map will not display
+    global Own_Gridsquare
 
     Wait_For_Loading_Label.pack(expand=True, fill=None)
     # Save where the map is centered before changing the scale factor
@@ -1190,6 +1311,7 @@ def draw_map(event):
     else:  # for zoom out action
         Map_Canvas.xview_moveto(Old_Scrollbar_X - 0.5 * int(re.split("[x+]",Grid_Map_Window.geometry())[0]) / Map_Width * (1 - Map_Scale_Factor / Old_Map_Scale_Factor)) #* (Map_Scale_Factor / Old_Map_Scale_Factor) 
         Map_Canvas.yview_moveto(Old_Scrollbar_Y - 0.5 * int(re.split("[x+]",Grid_Map_Window.geometry())[1]) / Map_Height * (1 - Map_Scale_Factor / Old_Map_Scale_Factor)) #* (Map_Scale_Factor / Old_Map_Scale_Factor)
+    draw_dist_and_az_lines()
     update_grid_boxes_no_event()
     Wait_For_Loading_Label.pack_forget()
     Grid_Map_Window.update()
@@ -1209,8 +1331,8 @@ Map_Canvas.bind("<B1-Motion>", map_mouse_move)
 
 # Treats the Grid map exit.
 def grid_map_window_exit():
-    Grid_Map_Window.withdraw()    
-
+    Grid_Map_Window.withdraw()
+    
 # Hints window creation.
 Hints_Window = Toplevel(QSO_List_Window)
 Hints_Window.withdraw()
