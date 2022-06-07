@@ -15,6 +15,9 @@
     
 # Release History
 #  - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
+# Version 1.1.1 (June 2022):
+# - Fixed program chash at startup when there was no existing station configuration.
+#  - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
 # Version 1.1 (May 2022):
 # - In the QSO Capture window, corrected the date value to update based on UTC time, not on local time.
 # - In the Grid Map window, added Distance Circle and Azimuth Line display options, along with associated checkboxes.
@@ -46,7 +49,7 @@ import great_circle_calculator as gcc
 
 # C_O_N_S_T_A_N_T_S
 
-SW_VERSION = " 1.1  15/05/2022"
+SW_VERSION = " 1.1.1  07/06/2022"
 DATE_POS = 0
 TIME_POS = 1
 BAND_POS = 2
@@ -1141,7 +1144,7 @@ def update_grid_boxes(event):
             Band4_Combo.pack_forget()
             Band4_frame.config(bg=Default_BG_Color,relief=FLAT)
     if (Azimuth_Checkbutton_Val.get() == 1) or (Distances_Checkbutton_Val.get() == 1):
-        create_qth_dot(Own_Gridsquare_X,Own_Gridsquare_Y,5,Map_Canvas)
+            if (Own_Gridsquare != ""): create_qth_dot(Own_Gridsquare_X,Own_Gridsquare_Y,5,Map_Canvas)
     Grid_Map_Window.update()
 
 # Is used to call the grid box updates when no event is passed.
@@ -1156,42 +1159,43 @@ def draw_dist_and_az_lines():
     global Own_Gridsquare_X
     global Own_Gridsquare_Y
     # Add the distance circles and azimuth lines
-    Map_Canvas.delete('Distance_Azimuth')
-    Own_Gridsquare_X = 10 * (ord(Own_Gridsquare[0]) - 65) * Long_Grid_Pitch
-    Own_Gridsquare_X = Own_Gridsquare_X + ((ord(Own_Gridsquare[2]) - 48) * Long_Grid_Pitch)     
-    if len(Own_Gridsquare) == 6: Own_Gridsquare_X = Own_Gridsquare_X + round((ord(Own_Gridsquare[4]) - 65) * Long_Grid_Pitch/24)
-    else: Own_Gridsquare_X = Own_Gridsquare_X + 0.5 * Long_Grid_Pitch
-    Own_Gridsquare_Y = Map_Height - (10 * (ord(Own_Gridsquare[1]) - 65) * Lat_Grid_Pitch)
-    Own_Gridsquare_Y = Own_Gridsquare_Y - ((ord(Own_Gridsquare[3]) - 48) * Lat_Grid_Pitch) # - 0.5 * Lat_Grid_Pitch
-    if len(Own_Gridsquare) == 6: Own_Gridsquare_Y = Own_Gridsquare_Y - round((ord(Own_Gridsquare[5]) - 65) * Lat_Grid_Pitch/24)
-    else: Own_Gridsquare_Y = Own_Gridsquare_Y - 0.5 * Lat_Grid_Pitch
-    lat_km_per_pixel = 180 * 111 / Map_Height  # 111 kilometers per degree of latitude
-    if (Azimuth_Checkbutton_Val.get() == 1) or (Distances_Checkbutton_Val.get() == 1):
-        Circle_Point_Pix_List = []  
-        for j in range(0,11):  # The number of points by 500 km increments
-            for i in range(0,120):  # 3 degree increments, so 120 points per circle
-                (Circle_Point_Deg_Lon, Circle_Point_Deg_Lat) = gcc.point_given_start_and_bearing((-180 + 2*Own_Gridsquare_X/Long_Grid_Pitch, 90 - Own_Gridsquare_Y/Lat_Grid_Pitch), i*3 , j * 500 * 1000, unit='meters') # This unpacks the (long,lat) tuple                
-                Circle_Point_Pix_List.append([round(Map_Height*2/2 + Circle_Point_Deg_Lon * Map_Height*2/360), round(Map_Height/2 - Circle_Point_Deg_Lat * Map_Height/180)])   # Draws a distance circle every 500 km
-                if i in range(1,360) and (Distances_Checkbutton_Val.get() == 1):
-                    Map_Canvas.create_line(Circle_Point_Pix_List[120*j+i-1][0], Circle_Point_Pix_List[120*j+i-1][1], Circle_Point_Pix_List[120*j+i][0], Circle_Point_Pix_List[120*j+i][1], fill="dark orange", width=1, dash=(5,5), tags='Distance_Azimuth')
-                if (i in range(0,360,5)) and (j in range(1,11) and (Azimuth_Checkbutton_Val.get() == 1)):  # Draws an azimuth line every 15 degrees
-                    Map_Canvas.create_line(Circle_Point_Pix_List[120*j+i-120][0], Circle_Point_Pix_List[120*j+i-120][1], Circle_Point_Pix_List[120*j+i][0], Circle_Point_Pix_List[120*j+i][1], fill="red", width=1, dash=(5,5), tags='Distance_Azimuth')
-        # Now draw labels over the lines
-        if (Distances_Checkbutton_Val.get() == 1):
-            for j in (2,4,6,8,10):  
-                for i in range(3,120,15):   
-                    canvas_text = Map_Canvas.create_text(Circle_Point_Pix_List[120*j+i][0], Circle_Point_Pix_List[120*j+i][1], text=j*500, font = "Verdana 7", anchor="center", fill="dark orange", tags='Distance_Azimuth')
-                    bgnd_box=Map_Canvas.create_rectangle(Map_Canvas.bbox(canvas_text),fill="white", outline="white", tags='Distance_Azimuth')
-                    Map_Canvas.tag_lower(bgnd_box,canvas_text)
-        if (Azimuth_Checkbutton_Val.get() == 1):
-            for j in (2,4,6,8,10):  
-                for i in range(0,120,10):   
-                    canvas_text = Map_Canvas.create_text(Circle_Point_Pix_List[120*j+i][0] - (Circle_Point_Pix_List[120*j+i][0]-Circle_Point_Pix_List[120*(j-1)+i][0])/2, Circle_Point_Pix_List[120*j+i][1] - (Circle_Point_Pix_List[120*j+i][1]-Circle_Point_Pix_List[120*(j-1)+i][1])/2, text=i*3, font = "Verdana 7", anchor="center", fill="red", tags='Distance_Azimuth')
-                    bgnd_box=Map_Canvas.create_rectangle(Map_Canvas.bbox(canvas_text),fill="white", outline="white", tags='Distance_Azimuth')
-                    Map_Canvas.tag_lower(bgnd_box,canvas_text)
-    if (Azimuth_Checkbutton_Val.get() == 1) or (Distances_Checkbutton_Val.get() == 1):
-        create_qth_dot(Own_Gridsquare_X,Own_Gridsquare_Y,5,Map_Canvas)
-    Grid_Map_Window.update()
+    if (Own_Gridsquare != ""): 
+        Map_Canvas.delete('Distance_Azimuth')
+        Own_Gridsquare_X = 10 * (ord(Own_Gridsquare[0]) - 65) * Long_Grid_Pitch
+        Own_Gridsquare_X = Own_Gridsquare_X + ((ord(Own_Gridsquare[2]) - 48) * Long_Grid_Pitch)     
+        if len(Own_Gridsquare) == 6: Own_Gridsquare_X = Own_Gridsquare_X + round((ord(Own_Gridsquare[4]) - 65) * Long_Grid_Pitch/24)
+        else: Own_Gridsquare_X = Own_Gridsquare_X + 0.5 * Long_Grid_Pitch
+        Own_Gridsquare_Y = Map_Height - (10 * (ord(Own_Gridsquare[1]) - 65) * Lat_Grid_Pitch)
+        Own_Gridsquare_Y = Own_Gridsquare_Y - ((ord(Own_Gridsquare[3]) - 48) * Lat_Grid_Pitch) # - 0.5 * Lat_Grid_Pitch
+        if len(Own_Gridsquare) == 6: Own_Gridsquare_Y = Own_Gridsquare_Y - round((ord(Own_Gridsquare[5]) - 65) * Lat_Grid_Pitch/24)
+        else: Own_Gridsquare_Y = Own_Gridsquare_Y - 0.5 * Lat_Grid_Pitch
+        lat_km_per_pixel = 180 * 111 / Map_Height  # 111 kilometers per degree of latitude
+        if (Azimuth_Checkbutton_Val.get() == 1) or (Distances_Checkbutton_Val.get() == 1):
+            Circle_Point_Pix_List = []  
+            for j in range(0,11):  # The number of points by 500 km increments
+                for i in range(0,120):  # 3 degree increments, so 120 points per circle
+                    (Circle_Point_Deg_Lon, Circle_Point_Deg_Lat) = gcc.point_given_start_and_bearing((-180 + 2*Own_Gridsquare_X/Long_Grid_Pitch, 90 - Own_Gridsquare_Y/Lat_Grid_Pitch), i*3 , j * 500 * 1000, unit='meters') # This unpacks the (long,lat) tuple                
+                    Circle_Point_Pix_List.append([round(Map_Height*2/2 + Circle_Point_Deg_Lon * Map_Height*2/360), round(Map_Height/2 - Circle_Point_Deg_Lat * Map_Height/180)])   # Draws a distance circle every 500 km
+                    if i in range(1,360) and (Distances_Checkbutton_Val.get() == 1):
+                        Map_Canvas.create_line(Circle_Point_Pix_List[120*j+i-1][0], Circle_Point_Pix_List[120*j+i-1][1], Circle_Point_Pix_List[120*j+i][0], Circle_Point_Pix_List[120*j+i][1], fill="dark orange", width=1, dash=(5,5), tags='Distance_Azimuth')
+                    if (i in range(0,360,5)) and (j in range(1,11) and (Azimuth_Checkbutton_Val.get() == 1)):  # Draws an azimuth line every 15 degrees
+                        Map_Canvas.create_line(Circle_Point_Pix_List[120*j+i-120][0], Circle_Point_Pix_List[120*j+i-120][1], Circle_Point_Pix_List[120*j+i][0], Circle_Point_Pix_List[120*j+i][1], fill="red", width=1, dash=(5,5), tags='Distance_Azimuth')
+            # Now draw labels over the lines
+            if (Distances_Checkbutton_Val.get() == 1):
+                for j in (2,4,6,8,10):  
+                    for i in range(3,120,15):   
+                        canvas_text = Map_Canvas.create_text(Circle_Point_Pix_List[120*j+i][0], Circle_Point_Pix_List[120*j+i][1], text=j*500, font = "Verdana 7", anchor="center", fill="dark orange", tags='Distance_Azimuth')
+                        bgnd_box=Map_Canvas.create_rectangle(Map_Canvas.bbox(canvas_text),fill="white", outline="white", tags='Distance_Azimuth')
+                        Map_Canvas.tag_lower(bgnd_box,canvas_text)
+            if (Azimuth_Checkbutton_Val.get() == 1):
+                for j in (2,4,6,8,10):  
+                    for i in range(0,120,10):   
+                        canvas_text = Map_Canvas.create_text(Circle_Point_Pix_List[120*j+i][0] - (Circle_Point_Pix_List[120*j+i][0]-Circle_Point_Pix_List[120*(j-1)+i][0])/2, Circle_Point_Pix_List[120*j+i][1] - (Circle_Point_Pix_List[120*j+i][1]-Circle_Point_Pix_List[120*(j-1)+i][1])/2, text=i*3, font = "Verdana 7", anchor="center", fill="red", tags='Distance_Azimuth')
+                        bgnd_box=Map_Canvas.create_rectangle(Map_Canvas.bbox(canvas_text),fill="white", outline="white", tags='Distance_Azimuth')
+                        Map_Canvas.tag_lower(bgnd_box,canvas_text)
+        if (Azimuth_Checkbutton_Val.get() == 1) or (Distances_Checkbutton_Val.get() == 1):
+            create_qth_dot(Own_Gridsquare_X,Own_Gridsquare_Y,5,Map_Canvas)
+        Grid_Map_Window.update()
 
 # Now add the band color selection comboboxes to the World Grid map window
 
