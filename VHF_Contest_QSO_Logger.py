@@ -15,6 +15,10 @@
     
 # Release History
 #  - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
+# Version 1.3 (January 2023):
+# - Corrected the score calculation algorithm to accurately take into account the January VHF contest.
+# - Updated Splash screen information
+#  - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
 # Version 1.2 (January 2023):
 # - Added "import sys", which was not needed on the author's computer in order to work. It should have been there...
 #  - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
@@ -50,7 +54,7 @@ import great_circle_calculator as gcc
 
 # C_O_N_S_T_A_N_T_S
 
-SW_VERSION = " 1.2  24/01/2023"
+SW_VERSION = " 1.3  24/01/2023"
 DATE_POS = 0
 TIME_POS = 1
 BAND_POS = 2
@@ -165,6 +169,9 @@ def calculate_score(Contest):
     global Multiplier
     global Score
     global QSO_List
+    
+    print(Contest)
+    
     Grid_List = []
     Band_List = []
     update_qso_list()
@@ -177,12 +184,12 @@ def calculate_score(Contest):
         elif QSO_List[i][BAND_POS] in ["222","432"]:
             QSO_Points = QSO_Points + 2
         elif QSO_List[i][BAND_POS] in ["902","1.2G"]:
-            if Contest == "January VHF Contest":
+            if Contest == "ARRL January VHF Contest":
                 QSO_Points = QSO_Points + 4
             else:
                 QSO_Points = QSO_Points + 3
         else:  # The remaining microwave bands 
-            if Contest == "January VHF Contest":
+            if Contest == "ARRL January VHF Contest":
                 QSO_Points = QSO_Points + 8
             else:
                 QSO_Points = QSO_Points + 4
@@ -837,8 +844,8 @@ Splash_Window_Canvas.Map_Image = Splash_Window_Canvas.create_image(0,0, anchor=N
 Splash_Window_Canvas.pack(side=TOP,expand=True,fill=BOTH)
 Splash_Window_Canvas.create_text(150,40,text = "VHF Contest Logger",font="Verdana 14", fill="white")
 Splash_Window_Canvas.create_text(150,60,text = "Version " + SW_VERSION, font="Verdana 12", fill="white")
-Splash_Window_Canvas.create_text(150,100,text = "By Bert - VE2ZAZ",font="Verdana 10", fill="white")
-Splash_Window_Canvas.create_text(150,120,text = "Website: http://ve2zaz.net",font="Verdana 10", fill="white")
+Splash_Window_Canvas.create_text(150,100,text = "By Bert - VE2ZAZ / VA2IW",font="Verdana 10", fill="white")
+Splash_Window_Canvas.create_text(150,120,text = "Website: https://ve2zaz.net",font="Verdana 10", fill="white")
 Splash_Window_Canvas.create_text(150,140,text = "Github: https://github.com/VE2ZAZ",font="Verdana 10", fill="white")
 Splash_Window.update()
 create_hint(Splash_Window,"To clear this popup window, just click on it.")
