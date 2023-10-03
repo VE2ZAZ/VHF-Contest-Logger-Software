@@ -15,7 +15,15 @@
     
 # Release History
 #  - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
-# Version 1.3 (January 2023):
+# Version 1.4 (October 2023):
+# - Added the logging of WSJT-X QSOs via local UDP ports 2237 and 2239. Two WSJT-X sessions can run concurrently,
+#   one per UDP port. Can be enabled in the Setup window. Settings are saved in config file
+# - Added the default station values when there is no config.sav file available in the directory. Would crash at launch otherwise.
+# - Duplicated QSOs "Dupes": Corrected the score calculation algorithm to reject duplicate QSOs. A new stat of Dupes is displayed
+# - Duplicated QSOs "Dupes": The QSO list now shows any subsequent dupe QSOs in red. The first QSO (valid) is shown in orange.
+# - Updated Splash screen information
+#  - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
+## Version 1.3 (January 2023):
 # - Corrected the score calculation algorithm to accurately take into account the January VHF contest.
 # - Updated Splash screen information
 #  - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
@@ -47,22 +55,27 @@ import os.path
 from shutil import copy
 from tkinter.scrolledtext import ScrolledText       # A textbox that cans scroll
 import re       # Allows to split using several delimiters for splitting strings
-import math
+#import math
 import sys
 sys.path.append("./great_circle_calculator")
 import great_circle_calculator as gcc
+import socket
 
 # C_O_N_S_T_A_N_T_S
 
-SW_VERSION = " 1.3  24/01/2023"
+SW_VERSION = " 1.4  01/10/2023"
 DATE_POS = 0
 TIME_POS = 1
 BAND_POS = 2
 MODE_POS = 3
 CALLSIGN_POS = 4
 GRIDSQUARE_POS = 5
+DUPE_POS = 6
 X1_MAP_HEIGHT = 2880
 X1_MAP_WIDTH = 5760
+UDP_IP = ''
+UDP_PORT1 = 2237
+UDP_PORT2 = 2239
 
 # G_L_O_B_A_L  V_A_R_I_A_B_L_E_S
 
@@ -89,6 +102,9 @@ Map_Scale_Factor = 1
 Map_Height = 2880
 Lat_Grid_Pitch = 0
 Long_Grid_Pitch = 0
+wsjt_1_logging_enabled = False
+wsjt_2_logging_enabled = False
+Number_Dupes = 0
 
 # M_A_I_N__C_O_D_E
 
@@ -147,7 +163,9 @@ def combobox_dupe_check(event):
     dupe_check()
 
 # This function scans for duplicate QSOs and colors them in red font in the QSO listbox.
-def qso_listbox_dupe_check(): 
+def qso_listbox_dupe_check():
+    global Number_Dupes
+    Number_Dupes = 0
     for i in range (0,QSO_Listbox.size()): QSO_Listbox.itemconfig(i, {'foreground':'black'}) # First, color all entries in black.
     for i in range (0,QSO_Listbox.size()): # Then, color the duplicated QSOs in red
         for j in range (i+1,QSO_Listbox.size()):  # Allows to not check a pair of QSOs twice
@@ -157,42 +175,45 @@ def qso_listbox_dupe_check():
             while "" in QSO_2: QSO_2.remove("") # Removes empty strings from list
             if ((QSO_1[BAND_POS] == QSO_2[BAND_POS]) and (QSO_1[CALLSIGN_POS] == QSO_2[CALLSIGN_POS]) and (QSO_1[GRIDSQUARE_POS] == QSO_2[GRIDSQUARE_POS])):
                 QSO_Listbox.itemconfig(i, {'foreground':'red'})
-                QSO_Listbox.itemconfig(j, {'foreground':'red'})
+                QSO_Listbox.itemconfig(j, {'foreground':'DarkOrange'})
                 QSO_Listbox.see(i)
+    for i in range (0,QSO_Listbox.size()):
+        if  (QSO_Listbox.itemcget(i, 'foreground') == 'red'):
+            Number_Dupes = Number_Dupes + 1
 
 # This function calculates the score based on the ARRL VHF Contest rules
 def calculate_score(Contest):
     global Number_QSOs
     global Number_Grids
     global Number_Bands
+    global Number_Dupes
     global QSO_Points
     global Multiplier
     global Score
     global QSO_List
     
-    print(Contest)
-    
     Grid_List = []
     Band_List = []
     update_qso_list()
     QSO_Points = 0
-    for i in range(0,len(QSO_List)):    
+    for i in range(0,len(QSO_List)):
         Grid_List.append(QSO_List[i][GRIDSQUARE_POS])
         Band_List.append(QSO_List[i][BAND_POS])
-        if QSO_List[i][BAND_POS] in ["50","70","144"]:
-            QSO_Points = QSO_Points + 1
-        elif QSO_List[i][BAND_POS] in ["222","432"]:
-            QSO_Points = QSO_Points + 2
-        elif QSO_List[i][BAND_POS] in ["902","1.2G"]:
-            if Contest == "ARRL January VHF Contest":
-                QSO_Points = QSO_Points + 4
-            else:
-                QSO_Points = QSO_Points + 3
-        else:  # The remaining microwave bands 
-            if Contest == "ARRL January VHF Contest":
-                QSO_Points = QSO_Points + 8
-            else:
-                QSO_Points = QSO_Points + 4
+        if not (QSO_Listbox.itemcget(i, 'foreground') == 'red'): # Rejects dupes in the QSO points calculation
+            if QSO_List[i][BAND_POS] in ["50","70","144"]:
+                QSO_Points = QSO_Points + 1
+            elif QSO_List[i][BAND_POS] in ["222","432"]:
+                QSO_Points = QSO_Points + 2
+            elif QSO_List[i][BAND_POS] in ["902","1.2G"]:
+                if Contest == "ARRL January VHF Contest":
+                    QSO_Points = QSO_Points + 4
+                else:
+                    QSO_Points = QSO_Points + 3
+            else:  # The remaining microwave bands 
+                if Contest == "ARRL January VHF Contest":
+                    QSO_Points = QSO_Points + 8
+                else:
+                    QSO_Points = QSO_Points + 4
     # Calculate Multipliers. Rule: The number of different grid squares contacted from each band.
     # Each grid square counts as a multiplier on each band.
     Unique_Band_List= []
@@ -246,7 +267,10 @@ def validate_time(event):
 # Save listbox data (QSOs) to the log file
 def log_file_save():
     global Contest_File_Name
-    if os.path.exists(Contest_File_Name): copy(Contest_File_Name,Contest_File_Name + ".bak") # copies original log to a backup file before any modification.
+    try:   # Catches a shutil.SameFileError bug that occurs only in Windows
+        if os.path.exists(Contest_File_Name): copy(Contest_File_Name,Contest_File_Name + ".bak") # copies original log to a backup file before any modification.
+    except:
+        pass     # Catches a file copy error.
     file = open(Contest_File_Name,'w') # Open text file for writing
     for i in range(0,QSO_Listbox.size()):    
         QSO_Line = QSO_Listbox.get(i).split(" ")
@@ -314,7 +338,9 @@ def save_qso_button_clicked():
     QSO_Listbox.insert(QSO_Index,Date_Entry_Val.get().ljust(12, ' ')
                        + Time_Entry_Val.get().ljust(6, ' ')
                        + Band_Combo_Val.get().ljust(6, ' ')
-                       + Mode_Combo_Val.get().ljust(4, ' ') + CallSign_Entry_Val.get().ljust(10, ' ') + GridSquare_Entry_Val.get().ljust(6, ' '))
+                       + Mode_Combo_Val.get().ljust(4, ' ')
+                       + CallSign_Entry_Val.get().ljust(10, ' ')
+                       + GridSquare_Entry_Val.get().ljust(6, ' '))
     for i in range(0,QSO_Listbox.size()):
         if (i%2==0): QSO_Listbox.itemconfigure(i, bg = "lightcyan2")  # even lines
         else: QSO_Listbox.itemconfigure(i, bg = "lightcyan3")   # Odd lines
@@ -341,6 +367,110 @@ def save_qso_button_clicked():
     qso_listbox_dupe_check()
     Stop_DateTime_Updates = False
     Edit_QSO_Action = False
+    
+# Checks if a new QSO has appeared on UDP port assigned to WSJT-X, and enters it as a new QSO in the QSO listbox.
+def check_and_save_qso_from_wsjt_thread():
+    global Edit_QSO_Action
+    global Stop_DateTime_Updates
+    global Edit_QSO_Index
+    global wsjt_1_logging_enabled
+    global wsjt_2_logging_enabled
+    global sock1
+    global sock2
+
+    def extract_to_QSO_Listbox():
+        temp_split = log_string.split('<call:') # Index 1: string length and the rest of the string
+        temp_split = temp_split[1].split('>')   # Index 0: string length, Index 1: desired string and the rest
+        wsjt_callsign = temp_split[1][0:int(temp_split[0])]  # Extrats just desired string
+        
+        temp_split = log_string.split('<gridsquare:') # Index 1: string length and the rest of the string
+        temp_split = temp_split[1].split('>')   # Index 0: string length, Index 1: desired string and the rest
+        wsjt_gridsquare = temp_split[1][0:4]  # Extrats just desired string
+
+        wsjt_mode = 'DG'
+
+        temp_split = log_string.split('<qso_date:') # Index 1: string length and the rest of the string
+        temp_split = temp_split[1].split('>')   # Index 0: string length, Index 1: desired string and the rest
+        wsjt_date = temp_split[1][0:8]  # Extrats just desired string
+        wsjt_date = wsjt_date[0:4] + '-' + wsjt_date[4:6] + '-' + wsjt_date[6:8]
+
+        temp_split = log_string.split('<time_on:') # Index 1: string length and the rest of the string
+        temp_split = temp_split[1].split('>')   # Index 0: string length, Index 1: desired string and the rest
+        wsjt_time = temp_split[1][0:4]  # Extrats just desired string
+
+        temp_split = log_string.split('<freq:') # Index 1: string length and the rest of the string
+        temp_split = temp_split[1].split('>')   # Index 0: string length, Index 1: desired string and the rest
+        wsjt_band = temp_split[1][0:int(temp_split[0])]  # Extrats just desired string
+
+        if (int(wsjt_band.split('.')[0])) in range(50,53): wsjt_band = "50"
+        elif (int(wsjt_band.split('.')[0])) in range(69,71): wsjt_band = "70"
+        elif (int(wsjt_band.split('.')[0])) in range(144,149): wsjt_band = "144"
+        elif (int(wsjt_band.split('.')[0])) in range(220,226): wsjt_band = "222"
+        elif (int(wsjt_band.split('.')[0])) in range(420,451): wsjt_band = "432"
+        elif (int(wsjt_band.split('.')[0])) in range(900,929): wsjt_band = "902"
+        elif (int(wsjt_band.split('.')[0])) in range(1240,1301): wsjt_band = "1.2G"
+        elif (int(wsjt_band.split('.')[0])) in range(2300,2451): wsjt_band = "2.3G"
+        elif (int(wsjt_band.split('.')[0])) in range(3300,3451): wsjt_band = "3.4G"
+        elif (int(wsjt_band.split('.')[0])) in range(5650,5926): wsjt_band = "5.7G"
+        elif (int(wsjt_band.split('.')[0])) in range(10000,10501): wsjt_band = "10G"
+        elif (int(wsjt_band.split('.')[0])) in range(24000,24251): wsjt_band = "24G"
+        elif (int(wsjt_band.split('.')[0])) in range(47000,47201): wsjt_band = "47G"
+        elif (int(wsjt_band.split('.')[0])) in range(76000,81001): wsjt_band = "75G"
+        elif (int(wsjt_band.split('.')[0])) in range(122250,123001): wsjt_band = "122G"
+        elif (int(wsjt_band.split('.')[0])) in range(134000,141001): wsjt_band = "134G"
+        elif (int(wsjt_band.split('.')[0])) in range(241000,250001): wsjt_band = "241G"
+        else: wsjt_band = "???"            
+
+        QSO_Index = 0
+        QSO_Listbox.insert(QSO_Index,wsjt_date.ljust(12, ' ')
+                            + wsjt_time.ljust(6, ' ')
+                            + wsjt_band.ljust(6, ' ')
+                            + wsjt_mode.ljust(4, ' ')
+                            + wsjt_callsign.ljust(10, ' ')
+                            + wsjt_gridsquare.ljust(6, ' '))
+        for i in range(0,QSO_Listbox.size()):
+            if (i%2==0): QSO_Listbox.itemconfigure(i, bg = "lightcyan2")  # even lines
+            else: QSO_Listbox.itemconfigure(i, bg = "lightcyan3")   # Odd lines
+        log_file_save()
+        QSO_Listbox.selection_clear(0, END) # Deselects any remaining items
+        CallSign_Entry_Val.set("")
+        GridSquare_Entry_Val.set("")
+        Date_Entry.configure(bg=Default_BG_Color, fg="gray44")
+        Time_Entry.configure(bg=Default_BG_Color, fg="gray44")
+        Save_QSO_Button.configure(text = "Save QSO", fg = "dark green")        
+        QSO_Entry_Window.configure(bg = Default_BG_Color)    
+        QSO_Listbox.configure(selectbackground="dodger blue")
+        QSO_Lower_button_frame.configure(bg = Default_BG_Color)    
+        QSO_Upper_button_frame.configure(bg = Default_BG_Color)    
+        QSO_Buttons_Frame.configure(bg = Default_BG_Color)
+        Date_Entry_Label.configure(bg = Default_BG_Color)    
+        Time_Entry_Label.configure(bg = Default_BG_Color)    
+        Band_Combo_Label.configure(bg = Default_BG_Color)    
+        CallSign_Entry_Label.configure(bg = Default_BG_Color)    
+        GridSquare_Entry_Label.configure(bg = Default_BG_Color)    
+        Mode_Combo_Label.configure(bg = Default_BG_Color)    
+        QSO_Entry_Window.grab_release()
+        Callsign_Entry.focus_set()
+        qso_listbox_dupe_check()
+        Stop_DateTime_Updates = False
+        Edit_QSO_Action = False
+
+    if (wsjt_1_logging_enabled):
+        try:
+            data, addr = sock1.recvfrom(1024) # buffer size is 1024 bytes
+            if data[11] == 12:
+                log_string  = data[36:].decode('ascii')
+                extract_to_QSO_Listbox()
+        except: pass
+    if (wsjt_2_logging_enabled):
+        try:
+            data, addr = sock2.recvfrom(1024) # buffer size is 1024 bytes
+            if data[11] == 12:
+                log_string  = data[36:].decode('ascii')
+                extract_to_QSO_Listbox()
+        except: pass
+    QSO_Entry_Window.after(100, check_and_save_qso_from_wsjt_thread)
+
 
 # This function erase the data that is already in the entry boxes of the Capture window.
 def clear_qso_text_button_clicked():
@@ -388,6 +518,7 @@ def stats_button_clicked():
     global Number_Bands
     global QSO_Points
     global Multiplier
+    global Number_Dupes
     global Score
     global Contest_Name
     global Stats_Window_Geometry_X
@@ -408,7 +539,7 @@ def stats_button_clicked():
         # Create window
         Stats_Window = Toplevel(QSO_List_Window)
         Stats_Window.title("VCL - Stats")    
-        Stats_Window.geometry('{}x{}+{}+{}'.format(250,200,Stats_Window_Geometry_X,Stats_Window_Geometry_Y))
+        Stats_Window.geometry('{}x{}+{}+{}'.format(250,220,Stats_Window_Geometry_X,Stats_Window_Geometry_Y))
         Stats_Window.configure(bg = Default_BG_Color)
         Stats_Window.resizable(0, 0) # Makes Log entry window size fixed
         Stats_Window.iconphoto(True, PhotoImage(file = "./images/VCL_Icon_350x350.png"))  # Only accepts .PNG files
@@ -423,40 +554,45 @@ def stats_button_clicked():
 
         Contest_Results_Text1_Label = Label(Stats_Window, text="Num. QSOs:", bg = Default_BG_Color )
         Contest_Results_Text1_Label.place(x=30,y=60)
-        Contest_Results_Text2_Label = Label(Stats_Window, text="Num. Grids:", bg = Default_BG_Color)
+        Contest_Results_Text2_Label = Label(Stats_Window, text="Num. Dupes:", bg = Default_BG_Color )
         Contest_Results_Text2_Label.place(x=30,y=80)
-        Contest_Results_Text3_Label = Label(Stats_Window, text="Num. Bands:", bg = Default_BG_Color)
+        Contest_Results_Text3_Label = Label(Stats_Window, text="Num. Grids:", bg = Default_BG_Color)
         Contest_Results_Text3_Label.place(x=30,y=100)
-        Contest_Results_Text4_Label = Label(Stats_Window, text="QSO Points:", bg = Default_BG_Color)
+        Contest_Results_Text4_Label = Label(Stats_Window, text="Num. Bands:", bg = Default_BG_Color)
         Contest_Results_Text4_Label.place(x=30,y=120)
-        Contest_Results_Text5_Label = Label(Stats_Window, text="Multipliers:", bg = Default_BG_Color)
+        Contest_Results_Text5_Label = Label(Stats_Window, text="QSO Points:", bg = Default_BG_Color)
         Contest_Results_Text5_Label.place(x=30,y=140)
-        Contest_Results_Text6_Label = Label(Stats_Window, text="Total Score:", bg = Default_BG_Color)
+        Contest_Results_Text6_Label = Label(Stats_Window, text="Multipliers:", bg = Default_BG_Color)
         Contest_Results_Text6_Label.place(x=30,y=160)
+        Contest_Results_Text7_Label = Label(Stats_Window, text="Total Score:", bg = Default_BG_Color)
+        Contest_Results_Text7_Label.place(x=30,y=180)
 
         Contest_Results_Number1_Label = Label(Stats_Window, text=Number_QSOs, bg = Default_BG_Color)
         Contest_Results_Number1_Label.place(x=130,y=60)
-        Contest_Results_Number2_Label = Label(Stats_Window, text=Number_Grids, bg = Default_BG_Color)
+        Contest_Results_Number2_Label = Label(Stats_Window, text=Number_Dupes, bg = Default_BG_Color)
         Contest_Results_Number2_Label.place(x=130,y=80)
-        Contest_Results_Number3_Label = Label(Stats_Window, text=Number_Bands, bg = Default_BG_Color)
+        Contest_Results_Number3_Label = Label(Stats_Window, text=Number_Grids, bg = Default_BG_Color)
         Contest_Results_Number3_Label.place(x=130,y=100)
-        Contest_Results_Number4_Label = Label(Stats_Window, text=QSO_Points, bg = Default_BG_Color)
+        Contest_Results_Number4_Label = Label(Stats_Window, text=Number_Bands, bg = Default_BG_Color)
         Contest_Results_Number4_Label.place(x=130,y=120)
-        Contest_Results_Number5_Label = Label(Stats_Window, text=Multiplier, bg = Default_BG_Color)
+        Contest_Results_Number5_Label = Label(Stats_Window, text=QSO_Points, bg = Default_BG_Color)
         Contest_Results_Number5_Label.place(x=130,y=140)
-        Contest_Results_Number6_Label = Label(Stats_Window, text=Score, bg = Default_BG_Color)
+        Contest_Results_Number6_Label = Label(Stats_Window, text=Multiplier, bg = Default_BG_Color)
         Contest_Results_Number6_Label.place(x=130,y=160)
+        Contest_Results_Number7_Label = Label(Stats_Window, text=Score, bg = Default_BG_Color)
+        Contest_Results_Number7_Label.place(x=130,y=180)
 
         # This function is defined inside the stats_button_clicked function because it refers to its widgets
         def update_stats():
             calculate_score(Contest_Name)
             Contest_Name_Label.config(text = Contest_Name)
             Contest_Results_Number1_Label.config(text = Number_QSOs)
-            Contest_Results_Number2_Label.config(text = Number_Grids)
-            Contest_Results_Number3_Label.config(text = Number_Bands)
-            Contest_Results_Number4_Label.config(text = QSO_Points)
-            Contest_Results_Number5_Label.config(text = Multiplier)
-            Contest_Results_Number6_Label.config(text = Score)
+            Contest_Results_Number2_Label.config(text = Number_Dupes)
+            Contest_Results_Number3_Label.config(text = Number_Grids)
+            Contest_Results_Number4_Label.config(text = Number_Bands)
+            Contest_Results_Number5_Label.config(text = QSO_Points)
+            Contest_Results_Number6_Label.config(text = Multiplier)
+            Contest_Results_Number7_Label.config(text = Score)
             Stats_Window.after(500, update_stats)
 
         # This function is defined inside the stats_button_clicked function because it refers to its widgets      
@@ -670,11 +806,16 @@ def cabrillo_file_button_clicked():
     cabrillo_file.close()
     showinfo("Cabrillo File Generation Complete","The Cabrillo file was saved as: \n" + cabrillo_file.name)
 
+
 # Creates and opens the Settings window, and treats the settings capture
 def settings_button_clicked():
     global Own_Callsign
     global Own_Gridsquare
     global Contest_Name
+    global wsjt_1_logging_enabled
+    global wsjt_2_logging_enabled
+    global sock1
+    global sock2
     
     #Converts the operator's grid square to uppercase. Also checks whether the 2-letter/2digits/2-letter grid square format is met
     def validate_setup_gridsquare(event):
@@ -715,15 +856,37 @@ def settings_button_clicked():
         global Own_Gridsquare
         Own_Callsign = Own_Callsign_Entry_Val.get().upper()
         Own_Gridsquare = Own_Gridsquare_Entry_Val.get()
+        if (Enable_WSJT_1_Logging_Checkbox_Val.get() == "checked"): wsjt_1_logging_enabled = True
+        else: wsjt_1_logging_enabled = False
+        if (Enable_WSJT_2_Logging_Checkbox_Val.get() == "checked"): wsjt_2_logging_enabled = True
+        else: wsjt_2_logging_enabled = False       
         Settings_Window.withdraw()
         Settings_Window.grab_release()
         update_grid_boxes_no_event()
         Grid_Map_Window.update()
         
+    def Validate_WSJT_1_Checkbox():
+        global wsjt_1_logging_enabled
+        if (Enable_WSJT_1_Logging_Checkbox_Val.get() == "checked"):
+            wsjt_1_logging_enabled = True
+            try:
+                while sock1.recv(1024): pass  # Empty socket buffer
+            except: pass
+        else: wsjt_1_logging_enabled = False
+
+    def Validate_WSJT_2_Checkbox():
+        global wsjt_2_logging_enabled
+        if (Enable_WSJT_2_Logging_Checkbox_Val.get() == "checked"):
+            wsjt_2_logging_enabled = True
+            try:
+                while sock2.recv(1024): pass  # Empty socket buffer
+            except: pass            
+        else: wsjt_2_logging_enabled = False
+
     # Open dialog
     Settings_Window = Toplevel(QSO_List_Window)
     Settings_Window.title("VCL - Settings")     
-    Settings_Window.geometry('{}x{}+{}+{}'.format(225,200,str(int(QSO_List_Window.geometry().split("+")[1])+100),str(int(QSO_List_Window.geometry().split("+")[2])+100)))
+    Settings_Window.geometry('{}x{}+{}+{}'.format(225,300,str(int(QSO_List_Window.geometry().split("+")[1])+100),str(int(QSO_List_Window.geometry().split("+")[2])+100)))
     Settings_Window.configure(bg = Default_BG_Color)
     Settings_Window.resizable(0, 0) # Makes Log entry window size fixed
     Settings_Window.iconphoto(True, PhotoImage(file = "./images/VCL_Icon_350x350.png"))  # Only accepts .PNG files
@@ -772,6 +935,25 @@ def settings_button_clicked():
     Font_Size_Scale.set(QSO_Listbox.cget("font").split(" ")[1])
     create_hint(Font_Size_Scale,"This cursor adjusts the font size of the QSOs in the QSO list box.")
 
+    Enable_WSJT_1_Logging_Checkbox_Val = StringVar(Settings_Window)
+    Enable_WSJT_1_Logging_Checkbox = Checkbutton(Settings_Window, text='WSJT-X #1 Logging\n(UDP Port 2237)',variable=Enable_WSJT_1_Logging_Checkbox_Val, onvalue = "checked", offvalue = "unchecked", command=Validate_WSJT_1_Checkbox)
+    if (wsjt_1_logging_enabled):
+        Enable_WSJT_1_Logging_Checkbox_Val.set("checked")
+#        if (sock1.fileno() == -1): sock1.bind((UDP_IP, UDP_PORT1))  # Closed socket, open it.
+    else:
+        Enable_WSJT_1_Logging_Checkbox_Val.set("unchecked")
+    Enable_WSJT_1_Logging_Checkbox.pack(pady = (8,0))
+    create_hint(Enable_WSJT_1_Logging_Checkbox,"This check box enables the logging of QSOs made the first instance of WSJT-X.")
+
+    Enable_WSJT_2_Logging_Checkbox_Val = StringVar(Settings_Window)
+    Enable_WSJT_2_Logging_Checkbox = Checkbutton(Settings_Window, text='WSJT-X #2 Logging\n(UDP Port 2239)',variable=Enable_WSJT_2_Logging_Checkbox_Val, onvalue = "checked", offvalue = "unchecked", command=Validate_WSJT_2_Checkbox)
+    if (wsjt_2_logging_enabled):
+        Enable_WSJT_2_Logging_Checkbox_Val.set("checked")
+    else:
+        Enable_WSJT_2_Logging_Checkbox_Val.set("unchecked")
+    Enable_WSJT_2_Logging_Checkbox.pack(pady = (2,0))
+    create_hint(Enable_WSJT_2_Logging_Checkbox,"This check box enables the logging of QSOs made the second instance of WSJT-X.")
+
 # Called when either the QSO Entry window or the QSO List window is closed. Signals the program exit.
 def process_app_exit():
     # Save all settings to the config file
@@ -794,6 +976,8 @@ def process_app_exit():
     file.write(Band3_Combo.get() + "\n")
     file.write(Band4_Combo.get() + "\n")
     file.write(str(Map_Scale_Factor) + "\n")
+    file.write(str(wsjt_1_logging_enabled) + "\n")
+    file.write(str(wsjt_2_logging_enabled) + "\n")
     file.close()
     # Close the remaining window
     try:    
@@ -889,8 +1073,8 @@ QSO_Listbox_Xscrollbar.configure(command = QSO_Listbox.xview)
 QSO_Listbox.configure(selectbackground="dodger blue")
 QSO_Listbox.configure(bg=Default_BG_Color)
 QSO_Listbox.bind('<<ListboxSelect>>', recall_qso_in_entry)  #<ButtonPress-1>
-create_hint(QSO_Listbox,"""The QSO List shows the QSOs that are saved in the logbook file. Any QSO pair displayed in red font shows callsign-band-grid duplicates. Also, clicking on a QSO"""
-                        """in the list will recall the information in the QSO capture window to save time on repeating stations on different bands.""")
+create_hint(QSO_Listbox,"""The QSO List shows the QSOs that are saved in the logbook file. \n\nAny QSO displayed in red font flags a callsign-band-grid duplicate of a previous QSO displayed in orange. \n\nAlso, clicking on a QSO """
+                        """in the list will recall the information in the QSO capture window to save time in logging repeating stations on different bands.""")
 
 # Add a label used when there are no log files loaded at startup, but do not pack it yet.
 No_Log_Loaded_Label = Label(QSO_Listbox, text="Please open an existing log file\nor create a new log.", bg = Default_BG_Color,font="Verdana 12")
@@ -1377,6 +1561,10 @@ try:
     Band3_Combo.set(file.readline()[:-1])
     Band4_Combo.set(file.readline()[:-1])
     Map_Scale_Factor = float(file.readline()[:-1])
+    if (file.readline()[:-1] == 'True'): wsjt_1_logging_enabled = True
+    else: wsjt_1_logging_enabled = False
+    if (file.readline()[:-1] == 'True'): wsjt_2_logging_enabled = True
+    else: wsjt_2_logging_enabled = False
     file.close()
     log_file_load()
     World_Scale_Combo_Val.set(Map_Scale_Factor)    
@@ -1389,6 +1577,8 @@ except IOError:     # Loading defaults
     No_Log_Loaded_Label.pack(expand=True, fill=None) # This makes the label appear
     QSO_List_Window.title("VCL - No Log Loaded")
     Contest_Name = ""
+    Own_Callsign = "NoCall"
+    Own_Gridsquare = "FN00"
     
 # Manage the window exits
 QSO_List_Window.protocol('WM_DELETE_WINDOW', process_app_exit)
@@ -1417,6 +1607,15 @@ qso_listbox_dupe_check()
 Splash_Window.withdraw()   # Hide the splash window.
 Splash_Window.grab_release()
 Callsign_Entry.focus_set()  # Send the focus to the QSO entry window.
+
+# Define and bind UDP sockets whether the UDP monitoring is enabled or not.
+sock1 = socket.socket(socket.AF_INET, socket.SOCK_DGRAM, socket.IPPROTO_UDP)  # Internet and UDP
+sock1.settimeout(0.1)
+sock1.bind((UDP_IP, UDP_PORT1))
+sock2 = socket.socket(socket.AF_INET, socket.SOCK_DGRAM, socket.IPPROTO_UDP)  # Internet and UDP
+sock2.settimeout(0.1)
+sock2.bind((UDP_IP, UDP_PORT2))
+QSO_Entry_Window.after(100, check_and_save_qso_from_wsjt_thread)  # Launch the WSJT-X UDP monitoring thread
 
 # Loop the main window
 QSO_Entry_Window.mainloop()
