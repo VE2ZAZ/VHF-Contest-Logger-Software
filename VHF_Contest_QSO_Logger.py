@@ -2,7 +2,7 @@
 # -*- coding: utf-8 -*-
 # Designed for Python 3
 #
-# VCL - ARRL VHF Contest Logger Software
+# VCL - VHF & Microwave Contest Logger Software
 # By Bert, VE2ZAZ / VA2IW
 # Website: http://ve2zaz.net
 # Github: https://github.com/VE2ZAZ/VHF_Contest_Logger_Software
@@ -14,6 +14,19 @@
 #  software, a mention of the original author, namely Bert-VE2ZAZ, would be a gracious consideration.
     
 # Release History
+#  - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
+# Version 1.5 (October 2023):
+# - Added support for several North-American microwave contests and the VHF/UHF Sprints.
+# - Added support for 6-character grid squares by selecting the proper contest description in the Setup window.
+# - The Statistics window now shows the total distance of all QSOs. Used in microwave contest score calculation.
+# - The Statistics window now shows the total distance multiplied by the Band factors of all QSOs.
+#   Used for the 222 MHz and Up Contest score calculation.
+# - Added the display of the latest QSO distance in kilometers at the bottom of the QSO Entry window.
+# - The QSO List banner now shows the Contest description along with the Logbook file name.
+# - Changed validation of grid square syntax. Now restricted to <A-R><A-R><0-9><0-9><A-X><A-X>. Follows allowed ranges.
+# - Now accepts call signs of up to 10 characters to allow special call sign stations.
+# - Renamed the software to "VCL - VHF & Microwave Contest Logger Software"
+# - Updated Splash screen information
 #  - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
 # Version 1.4 (October 2023):
 # - Added the logging of WSJT-X QSOs via local UDP ports 2237 and 2239. Two WSJT-X sessions can run concurrently,
@@ -48,7 +61,7 @@
 from tkinter import *       # Allows the creation of windows and widgets
 from tkinter import ttk     # Required for Combobox widget
 import datetime
-from tkinter.messagebox import askyesno, showerror, showinfo
+from tkinter.messagebox import askyesno, showerror, showinfo, showwarning
 from tkinter import filedialog
 import os
 import os.path
@@ -60,22 +73,58 @@ import sys
 sys.path.append("./great_circle_calculator")
 import great_circle_calculator as gcc
 import socket
+from math import sin, cos, sqrt, atan2, radians
 
 # C_O_N_S_T_A_N_T_S
 
-SW_VERSION = " 1.4  01/10/2023"
+SW_VERSION = " 1.5  08/10/2023"
 DATE_POS = 0
 TIME_POS = 1
 BAND_POS = 2
 MODE_POS = 3
 CALLSIGN_POS = 4
 GRIDSQUARE_POS = 5
-DUPE_POS = 6
 X1_MAP_HEIGHT = 2880
 X1_MAP_WIDTH = 5760
 UDP_IP = ''
 UDP_PORT1 = 2237
 UDP_PORT2 = 2239
+
+CONTEST_BANDS = ['50','70','144','222','432','902','1.2G','2.3G','3.4G','5.7G','10G','24G','47G','75G','122G','134G','241G','LIGHT']
+
+CONTESTS = ['Please Select Contest',                       # 0
+            'ARRL January VHF Contest',                    # 1
+            'ARRL June/September VHF Contest',             # 2
+            'NA VHF/UHF Sprint',                           # 3
+            'NA Microwave Sprint (6-char. Grid Sq.)',      # 4
+            'ARRL 222 MHz+ Contest (6-char. Grid Sq.)',    # 5
+            'ARRL 10 GHz+ Contest (6-char. Grid Sq.)']     # 6
+
+QSO_POINTS_TBL = [[0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0],               # 0
+                 [1, 1, 1, 2, 2, 4, 4, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8],                # 1
+                 [1, 1, 1, 2, 2, 3, 3, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4],                # 2
+                 [1, 1, 1, 1, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0],                # 3
+                 [0, 0, 0, 0, 0, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 0],                # 4
+                 [0, 0, 0, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 0],                # 5
+                 [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 100, 100, 100, 100, 100, 100, 100, 0]]  # 6
+
+# Band Factor only applies to 10 GHz and Up contest
+BAND_FACTOR =    [[0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0],           # 0
+                  [1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1],           # 1
+                  [1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1],           # 2
+                  [1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1],           # 3
+                  [1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1],           # 4
+                  [0, 0, 0, 2, 1, 4, 2, 6, 10, 10, 6, 20, 20, 20, 20, 20, 20, 0],   # 5
+                  [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1, 2, 3, 4, 5, 5, 5, 0]]           # 6
+
+# Distance factor: Contests with "True" will take the distance into account for score calculation
+CONTEST_DIST =  [False,   # 0
+                 False,   # 1
+                 False,   # 2
+                 False,   # 3
+                 True,    # 4                
+                 True,    # 5         
+                 True]    # 6
 
 # G_L_O_B_A_L  V_A_R_I_A_B_L_E_S
 
@@ -88,10 +137,12 @@ Number_Grids = 0
 Number_Bands = 0
 QSO_Points = 0
 Multiplier = 0
+Total_Dist = 0
+Tot_Band_Factor_Dist = 0
 Score = 0
 Own_Callsign = ""
 Own_Gridsquare = ""
-Contest_Name = ""
+Contest_Number = 0
 Stats_Window_Geometry_X = 100
 Stats_Window_Geometry_Y = 100
 Stats_Window_Open = False
@@ -105,6 +156,7 @@ Long_Grid_Pitch = 0
 wsjt_1_logging_enabled = False
 wsjt_2_logging_enabled = False
 Number_Dupes = 0
+Latest_QSO_Dist = 0
 
 # M_A_I_N__C_O_D_E
 
@@ -116,15 +168,38 @@ def dupe_check():
             and (QSO_Line[CALLSIGN_POS] == CallSign_Entry_Val.get()) and (CallSign_Entry_Val.get() != "")
             and (QSO_Line[GRIDSQUARE_POS] == GridSquare_Entry_Val.get()) and (Band_Combo_Val.get() != "")
             and (CallSign_Entry_Val.get() != "")):
-        QSO_Entry_Window.configure(bg = Default_BG_Color)    
-        QSO_Listbox.configure(selectbackground="dodger blue")
-        QSO_Listbox.selection_clear(0, END)
+                QSO_Entry_Window.configure(bg = Default_BG_Color)    
+                QSO_Listbox.configure(selectbackground="dodger blue")
+                QSO_Listbox.selection_clear(0, END)
     else:   # Now search for dupe QSO in QSO listbox.
         for i in range(0,QSO_Listbox.size()):
             QSO_String = QSO_Listbox.get(i)
-            if ((CallSign_Entry_Val.get()+" " in QSO_String)
+            if (not(CONTEST_DIST[Contest_Number])
+            and (CallSign_Entry_Val.get()+" " in QSO_String)
             and (CallSign_Entry_Val.get() != "")
-            and (GridSquare_Entry_Val.get()+" " in QSO_String)
+            and (GridSquare_Entry_Val.get()[0:4] in QSO_String)
+            and (GridSquare_Entry_Val.get() != "")
+            and ("  " + Band_Combo_Val.get() + "  " in QSO_String)):
+                QSO_Listbox.selection_clear(0, END)         # Dupe is found; set orange color to QSO Entry window widgets
+                QSO_Entry_Window.configure(bg = "sienna1")    
+                QSO_Lower_button_frame.configure(bg = "sienna1")    
+                QSO_Upper_button_frame.configure(bg = "sienna1")    
+                QSO_Buttons_Frame.configure(bg = "sienna1")    
+                Date_Entry_Label.configure(bg = "sienna1")    
+                Time_Entry_Label.configure(bg = "sienna1")    
+                Band_Combo_Label.configure(bg = "sienna1")    
+                CallSign_Entry_Label.configure(bg = "sienna1")    
+                GridSquare_Entry_Label.configure(bg = "sienna1")    
+                Mode_Combo_Label.configure(bg = "sienna1")    
+                QSO_Listbox.configure(selectbackground="sienna1")
+                QSO_Listbox.selection_set(i)
+                QSO_Listbox.index(i)
+                QSO_Listbox.see(i)
+                break
+            elif ((CONTEST_DIST[Contest_Number])
+            and (CallSign_Entry_Val.get()+" " in QSO_String)
+            and (CallSign_Entry_Val.get() != "")
+            and (GridSquare_Entry_Val.get()[0:6] in QSO_String)
             and (GridSquare_Entry_Val.get() != "")
             and ("  " + Band_Combo_Val.get() + "  " in QSO_String)):
                 QSO_Listbox.selection_clear(0, END)         # Dupe is found; set orange color to QSO Entry window widgets
@@ -165,6 +240,7 @@ def combobox_dupe_check(event):
 # This function scans for duplicate QSOs and colors them in red font in the QSO listbox.
 def qso_listbox_dupe_check():
     global Number_Dupes
+    global Contest_Number
     Number_Dupes = 0
     for i in range (0,QSO_Listbox.size()): QSO_Listbox.itemconfig(i, {'foreground':'black'}) # First, color all entries in black.
     for i in range (0,QSO_Listbox.size()): # Then, color the duplicated QSOs in red
@@ -173,13 +249,58 @@ def qso_listbox_dupe_check():
             while "" in QSO_1: QSO_1.remove("") # Removes empty strings from list
             QSO_2 =  QSO_Listbox.get(j).split(" ")
             while "" in QSO_2: QSO_2.remove("") # Removes empty strings from list
-            if ((QSO_1[BAND_POS] == QSO_2[BAND_POS]) and (QSO_1[CALLSIGN_POS] == QSO_2[CALLSIGN_POS]) and (QSO_1[GRIDSQUARE_POS] == QSO_2[GRIDSQUARE_POS])):
+            if (not(CONTEST_DIST[Contest_Number])
+            and (QSO_1[BAND_POS] == QSO_2[BAND_POS])
+            and (QSO_1[CALLSIGN_POS] == QSO_2[CALLSIGN_POS])
+            and (QSO_1[GRIDSQUARE_POS][0:4] == QSO_2[GRIDSQUARE_POS][0:4])):
+                QSO_Listbox.itemconfig(i, {'foreground':'red'})
+                QSO_Listbox.itemconfig(j, {'foreground':'DarkOrange'})
+                QSO_Listbox.see(i)
+            elif ((CONTEST_DIST[Contest_Number])
+            and (QSO_1[BAND_POS] == QSO_2[BAND_POS])
+            and (QSO_1[CALLSIGN_POS] == QSO_2[CALLSIGN_POS])
+            and (QSO_1[GRIDSQUARE_POS][0:6] == QSO_2[GRIDSQUARE_POS][0:6])):
                 QSO_Listbox.itemconfig(i, {'foreground':'red'})
                 QSO_Listbox.itemconfig(j, {'foreground':'DarkOrange'})
                 QSO_Listbox.see(i)
     for i in range (0,QSO_Listbox.size()):
         if  (QSO_Listbox.itemcget(i, 'foreground') == 'red'):
             Number_Dupes = Number_Dupes + 1
+
+def Update_QSO_List_Banner():
+    global Contest_Number
+    global Contest_File_Name
+    QSO_List_Window.title("VCL - " + CONTESTS[Contest_Number] + "  :  " + os.path.basename(Contest_File_Name).split(".VHFlog")[0])
+
+# Derives the latitude and longitude of a grid square
+def GridSquare_2_LatLong(gs):
+    #Decode Latitude: 2nd character (a letter)
+    gs_lat = (ord(gs[1]) - 65) * 10
+    #Decode Latitude: 4th character (a digit)
+    gs_lat += int(gs[3])
+    #Decode Latitude: 6th character (a letter)
+    gs_lat += ((ord(gs[5]) - 65)/24) + (1/48) - 90 
+    #Decode Longitude: 1st character (a letter)
+    gs_lon = (ord(gs[0]) - 65) * 20
+    #Decode Longitude: 3rd character (a digit)
+    gs_lon += int(gs[2]) * 2
+    #Decode Longitude: 5th character (a letter)
+    gs_lon += ((ord(gs[4]) - 65)/12) + (1/24) - 180
+    return [round(gs_lat,4), round(gs_lon,4)]
+
+# Calculates the distance between two grid squares, based on the haversine formula, which assumes the earth is a sphere.
+def Dist_Between_2_GridSquares(gs1,gs2):
+    R = 6373.0       # Approximate radius of earth in km
+    lat1 = radians(GridSquare_2_LatLong(gs1)[0])
+    lon1 = radians(GridSquare_2_LatLong(gs1)[1])
+    lat2 = radians(GridSquare_2_LatLong(gs2)[0])
+    lon2 = radians(GridSquare_2_LatLong(gs2)[1])
+    dlon = lon2 - lon1
+    dlat = lat2 - lat1
+    a = sin(dlat / 2)**2 + cos(lat1) * cos(lat2) * sin(dlon / 2)**2
+    c = 2 * atan2(sqrt(a), sqrt(1 - a))
+    distance = round(R * c)
+    return distance
 
 # This function calculates the score based on the ARRL VHF Contest rules
 def calculate_score(Contest):
@@ -189,31 +310,22 @@ def calculate_score(Contest):
     global Number_Dupes
     global QSO_Points
     global Multiplier
+    global Total_Dist
+    global Tot_Band_Factor_Dist
+    global Contest_Number
     global Score
     global QSO_List
     
     Grid_List = []
     Band_List = []
     update_qso_list()
+    # QSO points and band factor calculations. Some contests consider QSO points as multipliers!
     QSO_Points = 0
     for i in range(0,len(QSO_List)):
         Grid_List.append(QSO_List[i][GRIDSQUARE_POS])
         Band_List.append(QSO_List[i][BAND_POS])
         if not (QSO_Listbox.itemcget(i, 'foreground') == 'red'): # Rejects dupes in the QSO points calculation
-            if QSO_List[i][BAND_POS] in ["50","70","144"]:
-                QSO_Points = QSO_Points + 1
-            elif QSO_List[i][BAND_POS] in ["222","432"]:
-                QSO_Points = QSO_Points + 2
-            elif QSO_List[i][BAND_POS] in ["902","1.2G"]:
-                if Contest == "ARRL January VHF Contest":
-                    QSO_Points = QSO_Points + 4
-                else:
-                    QSO_Points = QSO_Points + 3
-            else:  # The remaining microwave bands 
-                if Contest == "ARRL January VHF Contest":
-                    QSO_Points = QSO_Points + 8
-                else:
-                    QSO_Points = QSO_Points + 4
+            QSO_Points += QSO_POINTS_TBL[Contest_Number][CONTEST_BANDS.index(QSO_List[i][BAND_POS])]
     # Calculate Multipliers. Rule: The number of different grid squares contacted from each band.
     # Each grid square counts as a multiplier on each band.
     Unique_Band_List= []
@@ -223,33 +335,67 @@ def calculate_score(Contest):
     for i in range(0,len(Unique_Band_List)):
         Temp_List = []
         for j in range(0,len(QSO_List)):
-            if Band_List[j] == Unique_Band_List[i]: Temp_List.append(Grid_List[j])
-        Multiplier = Multiplier + len(list(set(Temp_List))) # The sum of all unique grids contacted per band        
-    Score = QSO_Points * Multiplier
+            if Band_List[j] == Unique_Band_List[i]: Temp_List.append(Grid_List[j][0:4]) # Only consider first 4 grid square characters
+        Multiplier += len(list(set(Temp_List))) # The sum of all unique grids contacted per band        
     Number_QSOs = QSO_Listbox.size()
     Number_Grids = len(set(Grid_List))   # Counts unique grids
     Number_Bands = len(set(Band_List))   # Counts unique bands
+    # Calculate total distance with Band Factor. Band factor is for 10 GHz and Up Contest.
+    Total_Dist = 0
+    Tot_Band_Factor_Dist = 0
+    for i in range(0,len(QSO_List)):
+        if (len(QSO_List[i][GRIDSQUARE_POS]) == 4):   # 4-character grid square
+            stuffed_gridsquare = QSO_List[i][GRIDSQUARE_POS] + 'LL'  # Assumes the center of the grid
+            QSO_Dist = Dist_Between_2_GridSquares(Own_Gridsquare,stuffed_gridsquare)
+            Total_Dist += QSO_Dist
+        else:   # Full 6-character grid square
+            if (Own_Gridsquare == QSO_List[i][GRIDSQUARE_POS]):
+                Total_Dist += 1
+                Tot_Band_Factor_Dist += 1 * BAND_FACTOR[Contest_Number][CONTEST_BANDS.index(QSO_List[i][BAND_POS])]
+            else:
+                QSO_Dist = Dist_Between_2_GridSquares(Own_Gridsquare,QSO_List[i][GRIDSQUARE_POS])
+                Total_Dist += QSO_Dist
+                Tot_Band_Factor_Dist += QSO_Dist * BAND_FACTOR[Contest_Number][CONTEST_BANDS.index(QSO_List[i][BAND_POS])]                
+    # Calculate final score, depending on contest
+    if not(CONTEST_DIST[Contest_Number]):   # Check of it is a 4 character grid square contest
+        Score = QSO_Points * Multiplier
+    elif (Contest_Number == 4):
+        Score = Total_Dist
+    elif (Contest_Number == 5):
+        Score = Tot_Band_Factor_Dist
+    elif (Contest_Number == 6):
+        Score = Tot_Band_Factor_Dist + QSO_Points
 
 #Converts the Callsign to uppercase and check for duplicates on-the-fly
 def validate_callsign(event):
     CallSign_Entry_Val.set(CallSign_Entry_Val.get().upper())
-    if len(CallSign_Entry_Val.get()) > 8: CallSign_Entry_Val.set(CallSign_Entry_Val.get()[:-1])
+    if len(CallSign_Entry_Val.get()) > 10: CallSign_Entry_Val.set(CallSign_Entry_Val.get()[:-1])
     CallSign_Entry_Val.set(re.sub('[^A-Z0-9/]', '', CallSign_Entry_Val.get()))  # Filters out characters other than digits, letters and '/'
     dupe_check()
 
-#Converts the grid square to uppercase and check for duplicates on-the-fly. Also returns whether the 2-letter/2digits grid square format is met
+#Converts the grid square to uppercase and check for duplicates on-the-fly. Also returns whether the 2-letter/2digits(/2-letter) grid square format is met
 def validate_gridsquare(event):
+    global Contest_Number
     GridSquare_Entry_Val.set(GridSquare_Entry_Val.get().upper())
-    if len(GridSquare_Entry_Val.get()) > 4: GridSquare_Entry_Val.set(GridSquare_Entry_Val.get()[:-1])
+    if ((len(GridSquare_Entry_Val.get()) > 4) and not(CONTEST_DIST[Contest_Number])): GridSquare_Entry_Val.set(GridSquare_Entry_Val.get()[:-1])
+    elif (len(GridSquare_Entry_Val.get()) > 6): GridSquare_Entry_Val.set(GridSquare_Entry_Val.get()[:-1])
     GridSquare_Breakdown_List = list(GridSquare_Entry_Val.get())
     if (len(GridSquare_Breakdown_List) == 1):
-        GridSquare_Entry_Val.set(re.sub('[^A-Z]', '', GridSquare_Breakdown_List[0]))
+        GridSquare_Entry_Val.set(re.sub('[^A-R]', '', GridSquare_Breakdown_List[0]))
     elif (len(GridSquare_Breakdown_List) == 2):
-        GridSquare_Entry_Val.set(re.sub('[^A-Z]', '', GridSquare_Breakdown_List[0] + GridSquare_Breakdown_List[1]))
+        GridSquare_Entry_Val.set(re.sub('[^A-R]', '', GridSquare_Breakdown_List[0] + GridSquare_Breakdown_List[1]))
     elif (len(GridSquare_Breakdown_List) == 3):
-        GridSquare_Entry_Val.set(re.sub('[^A-Z]', '', GridSquare_Breakdown_List[0] + GridSquare_Breakdown_List[1]) + re.sub('[^0-9]', '', GridSquare_Breakdown_List[2]))
+        GridSquare_Entry_Val.set(re.sub('[^A-R]', '', GridSquare_Breakdown_List[0] + GridSquare_Breakdown_List[1]) + re.sub('[^0-9]', '', GridSquare_Breakdown_List[2]))
     elif (len(GridSquare_Breakdown_List) == 4):
-        GridSquare_Entry_Val.set(re.sub('[^A-Z]', '', GridSquare_Breakdown_List[0] + GridSquare_Breakdown_List[1]) + re.sub('[^0-9]', '', GridSquare_Breakdown_List[2] + GridSquare_Breakdown_List[3]))
+        GridSquare_Entry_Val.set(re.sub('[^A-R]', '', GridSquare_Breakdown_List[0] + GridSquare_Breakdown_List[1]) + re.sub('[^0-9]', '', GridSquare_Breakdown_List[2] + GridSquare_Breakdown_List[3]))
+    if (CONTEST_DIST[Contest_Number]):
+        if (len(GridSquare_Breakdown_List) == 5):
+            GridSquare_Entry_Val.set(re.sub('[^A-R]', '', GridSquare_Breakdown_List[0] + GridSquare_Breakdown_List[1]) + re.sub('[^0-9]', '', GridSquare_Breakdown_List[2] + GridSquare_Breakdown_List[3]) + re.sub('[^A-X]', '', GridSquare_Breakdown_List[4]))
+        elif (len(GridSquare_Breakdown_List) == 6):
+            GridSquare_Entry_Val.set(re.sub('[^A-R]', '', GridSquare_Breakdown_List[0] + GridSquare_Breakdown_List[1]) + re.sub('[^0-9]', '', GridSquare_Breakdown_List[2] + GridSquare_Breakdown_List[3]) + re.sub('[^A-X]', '', GridSquare_Breakdown_List[4] + GridSquare_Breakdown_List[5]))
+            dupe_check()
+            return True
+    else:
         dupe_check()
         return True
     dupe_check()
@@ -290,6 +436,7 @@ def log_file_save():
 # Loads a selected log book file and populates the QSO listbox with the QSOs from the log book file.
 def log_file_load():
     global Contest_File_Name
+    global QSO_Listbox
     QSO_Listbox.delete (0 , QSO_Listbox.size()-1)  # First clear all old QSOs in the QSO listbox
     try:
         file = open(Contest_File_Name,'r') # Open text file for reading
@@ -304,7 +451,7 @@ def log_file_load():
             else: QSO_Listbox.itemconfigure(i, bg = "lightcyan3")
         file.close()
         No_Log_Loaded_Label.pack_forget() # This makes the label disappear
-        QSO_List_Window.title("VCL - Log:  " + os.path.basename(Contest_File_Name).split(".VHFlog")[0])
+        Update_QSO_List_Banner()
     except IOError:
         No_Log_Loaded_Label.pack(expand=True, fill=None) # This makes the label appear
         QSO_List_Window.title("VCL - No Log Loaded")
@@ -341,6 +488,13 @@ def save_qso_button_clicked():
                        + Mode_Combo_Val.get().ljust(4, ' ')
                        + CallSign_Entry_Val.get().ljust(10, ' ')
                        + GridSquare_Entry_Val.get().ljust(6, ' '))
+    if (len(GridSquare_Entry_Val.get()) == 4):   # 4-character grid square
+        stuffed_gridsquare = GridSquare_Entry_Val.get() + 'LL'  # Assumes the center of the grid
+        Latest_QSO_Dist = Dist_Between_2_GridSquares(Own_Gridsquare,stuffed_gridsquare)
+        Dist_Text_Label.config(text = 'Latest QSO Distance (Km): ~' + str(Latest_QSO_Dist))
+    else:
+        Latest_QSO_Dist = Dist_Between_2_GridSquares(Own_Gridsquare,GridSquare_Entry_Val.get())
+        Dist_Text_Label.config(text = 'Latest QSO Distance (Km): ' + str(Latest_QSO_Dist))
     for i in range(0,QSO_Listbox.size()):
         if (i%2==0): QSO_Listbox.itemconfigure(i, bg = "lightcyan2")  # even lines
         else: QSO_Listbox.itemconfigure(i, bg = "lightcyan3")   # Odd lines
@@ -377,6 +531,7 @@ def check_and_save_qso_from_wsjt_thread():
     global wsjt_2_logging_enabled
     global sock1
     global sock2
+    global Contest_Number
 
     def extract_to_QSO_Listbox():
         temp_split = log_string.split('<call:') # Index 1: string length and the rest of the string
@@ -385,8 +540,13 @@ def check_and_save_qso_from_wsjt_thread():
         
         temp_split = log_string.split('<gridsquare:') # Index 1: string length and the rest of the string
         temp_split = temp_split[1].split('>')   # Index 0: string length, Index 1: desired string and the rest
-        wsjt_gridsquare = temp_split[1][0:4]  # Extrats just desired string
-
+        wsjt_gridsquare = temp_split[1][0:int(temp_split[0])]  # Extrats just desired string
+        if ((CONTEST_DIST[Contest_Number]) and (len(wsjt_gridsquare) == 4)): # A 6-character grid contest            
+            showerror(title='WSJT-X Config Error', message='Error: WSJT-X only sending 4-character Grid Squares. Change WSJT-X Special Operating Activity settings.')
+            return
+        elif (not(CONTEST_DIST[Contest_Number]) and (len(wsjt_gridsquare) == 6)): # A 4-character grid contest
+            showwarning(title='WSJT-X Config Warning', message='Warning: WSJT-X is sending 6-character Grid Squares. Last two characters are dropped.')
+            
         wsjt_mode = 'DG'
 
         temp_split = log_string.split('<qso_date:') # Index 1: string length and the rest of the string
@@ -519,11 +679,14 @@ def stats_button_clicked():
     global QSO_Points
     global Multiplier
     global Number_Dupes
+    global Total_Dist
+    global Tot_Band_Factor_Dist
     global Score
-    global Contest_Name
     global Stats_Window_Geometry_X
     global Stats_Window_Geometry_Y
-    global Stats_Window_Open 
+    global Stats_Window_Open
+    global Contest_Number
+    global Latest_QSO_Dist
 
     if not Stats_Window_Open:  # Otherwise more than one instance of that wndow will be created
         def window_position_save(event):
@@ -533,66 +696,77 @@ def stats_button_clicked():
             Stats_Window_Geometry_Y = Stats_Window.geometry().split("+")[2]
             Stats_Window.protocol('WM_DELETE_WINDOW', stats_window_exit)
 
-        if (Contest_Name == ""):
+        if (Contest_Number == 0):
             showerror("Error!","The Score Calculation requires that you first configure the contest settings. Please fill out the Settings window first.")
             return
         # Create window
         Stats_Window = Toplevel(QSO_List_Window)
-        Stats_Window.title("VCL - Stats")    
-        Stats_Window.geometry('{}x{}+{}+{}'.format(250,220,Stats_Window_Geometry_X,Stats_Window_Geometry_Y))
+        Stats_Window.title("VCL - Statistics")    
+        Stats_Window.geometry('{}x{}+{}+{}'.format(320,280,Stats_Window_Geometry_X,Stats_Window_Geometry_Y))
         Stats_Window.configure(bg = Default_BG_Color)
         Stats_Window.resizable(0, 0) # Makes Log entry window size fixed
         Stats_Window.iconphoto(True, PhotoImage(file = "./images/VCL_Icon_350x350.png"))  # Only accepts .PNG files
         Stats_Window.bind("<Configure>", window_position_save)
         create_hint(Stats_Window,("""This window displays the log statistics in real time as per the ARRL rules. The score takes into account that the """
-                                  """January contest rules awards a higher score to UHF and microwave QSOs"""))
+                                  """January contest rules awards a higher score to UHF and microwave QSOs. The microwave contests use the distance """
+                                  """between the two stations in all QSOs for the score calculation."""))
 
         Contest_Name_Title_Label = Label(Stats_Window, text="Contest:", bg = Default_BG_Color )
         Contest_Name_Title_Label.place(x=30,y=15)
-        Contest_Name_Label = Label(Stats_Window, text=Contest_Name, bg = Default_BG_Color )
+        Contest_Name_Label = Label(Stats_Window, text=CONTESTS[Contest_Number], bg = Default_BG_Color )
         Contest_Name_Label.place(x=30,y=32)
 
-        Contest_Results_Text1_Label = Label(Stats_Window, text="Num. QSOs:", bg = Default_BG_Color )
-        Contest_Results_Text1_Label.place(x=30,y=60)
-        Contest_Results_Text2_Label = Label(Stats_Window, text="Num. Dupes:", bg = Default_BG_Color )
-        Contest_Results_Text2_Label.place(x=30,y=80)
-        Contest_Results_Text3_Label = Label(Stats_Window, text="Num. Grids:", bg = Default_BG_Color)
-        Contest_Results_Text3_Label.place(x=30,y=100)
-        Contest_Results_Text4_Label = Label(Stats_Window, text="Num. Bands:", bg = Default_BG_Color)
-        Contest_Results_Text4_Label.place(x=30,y=120)
-        Contest_Results_Text5_Label = Label(Stats_Window, text="QSO Points:", bg = Default_BG_Color)
-        Contest_Results_Text5_Label.place(x=30,y=140)
-        Contest_Results_Text6_Label = Label(Stats_Window, text="Multipliers:", bg = Default_BG_Color)
-        Contest_Results_Text6_Label.place(x=30,y=160)
-        Contest_Results_Text7_Label = Label(Stats_Window, text="Total Score:", bg = Default_BG_Color)
-        Contest_Results_Text7_Label.place(x=30,y=180)
+        Contest_Results_Text2_Label = Label(Stats_Window, text="Num. QSOs:", bg = Default_BG_Color )
+        Contest_Results_Text2_Label.place(x=30,y=60)
+        Contest_Results_Text3_Label = Label(Stats_Window, text="Num. Dupes:", bg = Default_BG_Color )
+        Contest_Results_Text3_Label.place(x=30,y=80)
+        Contest_Results_Text4_Label = Label(Stats_Window, text="Num. Grids:", bg = Default_BG_Color)
+        Contest_Results_Text4_Label.place(x=30,y=100)
+        Contest_Results_Text5_Label = Label(Stats_Window, text="Num. Bands:", bg = Default_BG_Color)
+        Contest_Results_Text5_Label.place(x=30,y=120)
+        Contest_Results_Text6_Label = Label(Stats_Window, text="QSO Points:", bg = Default_BG_Color)
+        Contest_Results_Text6_Label.place(x=30,y=140)
+        Contest_Results_Text7_Label = Label(Stats_Window, text="Multipliers:", bg = Default_BG_Color)
+        Contest_Results_Text7_Label.place(x=30,y=160)
+        Contest_Results_Text8_Label = Label(Stats_Window, text="Total Dist. (Km):", bg = Default_BG_Color)
+        Contest_Results_Text8_Label.place(x=30,y=180)
+        Contest_Results_Text9_Label = Label(Stats_Window, text="Total Band Factor Dist:", bg = Default_BG_Color)
+        Contest_Results_Text9_Label.place(x=30,y=200)
+        Contest_Results_Text10_Label = Label(Stats_Window, text="Total Score:", bg = Default_BG_Color, font='Helvetica 11 bold')
+        Contest_Results_Text10_Label.place(x=30,y=225)
 
-        Contest_Results_Number1_Label = Label(Stats_Window, text=Number_QSOs, bg = Default_BG_Color)
-        Contest_Results_Number1_Label.place(x=130,y=60)
-        Contest_Results_Number2_Label = Label(Stats_Window, text=Number_Dupes, bg = Default_BG_Color)
-        Contest_Results_Number2_Label.place(x=130,y=80)
-        Contest_Results_Number3_Label = Label(Stats_Window, text=Number_Grids, bg = Default_BG_Color)
-        Contest_Results_Number3_Label.place(x=130,y=100)
-        Contest_Results_Number4_Label = Label(Stats_Window, text=Number_Bands, bg = Default_BG_Color)
-        Contest_Results_Number4_Label.place(x=130,y=120)
-        Contest_Results_Number5_Label = Label(Stats_Window, text=QSO_Points, bg = Default_BG_Color)
-        Contest_Results_Number5_Label.place(x=130,y=140)
-        Contest_Results_Number6_Label = Label(Stats_Window, text=Multiplier, bg = Default_BG_Color)
-        Contest_Results_Number6_Label.place(x=130,y=160)
-        Contest_Results_Number7_Label = Label(Stats_Window, text=Score, bg = Default_BG_Color)
-        Contest_Results_Number7_Label.place(x=130,y=180)
+        Contest_Results_Number2_Label = Label(Stats_Window, text=Number_QSOs, bg = Default_BG_Color)
+        Contest_Results_Number2_Label.place(x=200,y=60)
+        Contest_Results_Number3_Label = Label(Stats_Window, text=Number_Dupes, bg = Default_BG_Color)
+        Contest_Results_Number3_Label.place(x=200,y=80)
+        Contest_Results_Number4_Label = Label(Stats_Window, text=Number_Grids, bg = Default_BG_Color)
+        Contest_Results_Number4_Label.place(x=200,y=100)
+        Contest_Results_Number5_Label = Label(Stats_Window, text=Number_Bands, bg = Default_BG_Color)
+        Contest_Results_Number5_Label.place(x=200,y=120)
+        Contest_Results_Number6_Label = Label(Stats_Window, text=QSO_Points, bg = Default_BG_Color)
+        Contest_Results_Number6_Label.place(x=200,y=140)
+        Contest_Results_Number7_Label = Label(Stats_Window, text=Multiplier, bg = Default_BG_Color)
+        Contest_Results_Number7_Label.place(x=200,y=160)
+        Contest_Results_Number8_Label = Label(Stats_Window, text=Total_Dist, bg = Default_BG_Color)
+        Contest_Results_Number8_Label.place(x=200,y=180)
+        Contest_Results_Number9_Label = Label(Stats_Window, text=Tot_Band_Factor_Dist, bg = Default_BG_Color)
+        Contest_Results_Number9_Label.place(x=200,y=200)
+        Contest_Results_Number10_Label = Label(Stats_Window, text=Score, bg = Default_BG_Color, font='Helvetica 11 bold')
+        Contest_Results_Number10_Label.place(x=200,y=225)
 
         # This function is defined inside the stats_button_clicked function because it refers to its widgets
         def update_stats():
-            calculate_score(Contest_Name)
-            Contest_Name_Label.config(text = Contest_Name)
-            Contest_Results_Number1_Label.config(text = Number_QSOs)
-            Contest_Results_Number2_Label.config(text = Number_Dupes)
-            Contest_Results_Number3_Label.config(text = Number_Grids)
-            Contest_Results_Number4_Label.config(text = Number_Bands)
-            Contest_Results_Number5_Label.config(text = QSO_Points)
-            Contest_Results_Number6_Label.config(text = Multiplier)
-            Contest_Results_Number7_Label.config(text = Score)
+            calculate_score(Contest_Number)
+            Contest_Name_Label.config(text = CONTESTS[Contest_Number])
+            Contest_Results_Number2_Label.config(text = Number_QSOs)
+            Contest_Results_Number3_Label.config(text = Number_Dupes)
+            Contest_Results_Number4_Label.config(text = Number_Grids)
+            Contest_Results_Number5_Label.config(text = Number_Bands)
+            Contest_Results_Number6_Label.config(text = QSO_Points)
+            Contest_Results_Number7_Label.config(text = Multiplier)
+            Contest_Results_Number8_Label.config(text = Total_Dist)
+            Contest_Results_Number9_Label.config(text = Tot_Band_Factor_Dist)
+            Contest_Results_Number10_Label.config(text = Score)
             Stats_Window.after(500, update_stats)
 
         # This function is defined inside the stats_button_clicked function because it refers to its widgets      
@@ -612,11 +786,18 @@ def open_contest_button_clicked():
     if (len(Temp) == 0): return
     Contest_File_Name = Temp
     log_file_load()
-    QSO_List_Window.title("VCL - Log:  " + os.path.basename(Contest_File_Name).split(".VHFlog")[0])
+    Update_QSO_List_Banner()
     update_qso_list()
     update_grid_boxes_no_event()
     qso_listbox_dupe_check()
-
+    grid_has_4_chars = False
+    for i in range(0,QSO_Listbox.size()):    
+        if ((len(QSO_List[i][GRIDSQUARE_POS]) < 6) and (CONTEST_DIST[Contest_Number])): grid_has_4_chars = True
+    if (grid_has_4_chars):
+        showwarning(title='Contest Config Warning', message='Warning: The QSO list contains 4-character grid squares, but the selected contest calls for 6-character grid squares. Score calculation will be wrong!')
+    showinfo('Select Contest Type', 'Make sure to select the Current Contest Type in the Setup window.')
+    Hints_Window.lift()
+    
 # Clears the existing QSOs from the QSO listbox and opens a new contest logbook file
 def new_contest_button_clicked():
     global Contest_File_Name
@@ -627,8 +808,9 @@ def new_contest_button_clicked():
         Contest_File_Name = Contest_File_Name + ".VHFlog"
     QSO_Listbox.delete(0, last=QSO_Listbox.size()-1)
     log_file_save()
-    QSO_List_Window.title("VCL - Log:  " + os.path.basename(Contest_File_Name).split(".VHFlog")[0])
+    Update_QSO_List_Banner()
     update_qso_list()
+    showinfo('Select Contest Type', 'Make sure to select the Current Contest Type in the Setup window.')
 
 # Brings up the splash window to act as an about page
 def about_button_clicked():
@@ -767,13 +949,12 @@ def hints_button_clicked():
     x = round(int(QSO_List_Window.geometry().split("+")[1]) + int(re.split("[x+]",QSO_List_Window.geometry())[0])/2 - int(re.split("[x+]",Hints_Window.geometry())[0])/2)
     y = round(int(QSO_List_Window.geometry().split("+")[2]) + int(re.split("[x+]",QSO_List_Window.geometry())[1])/2 - int(re.split("[x+]",Hints_Window.geometry())[1])/2)
     Hints_Window.geometry("%dx%d+%d+%d" % (400,100,x,y))  # Place splash screen at center of screen
-    Hints_Window.lift()
 
 def cabrillo_file_button_clicked():
-    global Contest_Name
+    global Contest_Number
     global Own_Callsign
     global Own_Gridsquare
-    calculate_score(Contest_Name)
+    calculate_score(Contest_Number)
     if (Own_Callsign == "") or (Own_Gridsquare == ""):
         showerror("Error!","Cabrillo file Generation requires that you first configure the contest settings. Please fill out the Settings window first.")
         return
@@ -811,11 +992,13 @@ def cabrillo_file_button_clicked():
 def settings_button_clicked():
     global Own_Callsign
     global Own_Gridsquare
-    global Contest_Name
+    global Contest_Number
     global wsjt_1_logging_enabled
     global wsjt_2_logging_enabled
     global sock1
     global sock2
+    global QSO_List
+
     
     #Converts the operator's grid square to uppercase. Also checks whether the 2-letter/2digits/2-letter grid square format is met
     def validate_setup_gridsquare(event):
@@ -823,17 +1006,17 @@ def settings_button_clicked():
         if len(Own_Gridsquare_Entry_Val.get()) > 6: Own_Gridsquare_Entry_Val.set(Own_Gridsquare_Entry_Val.get()[:-1])
         GridSquare_Breakdown_List = list(Own_Gridsquare_Entry_Val.get())
         if (len(GridSquare_Breakdown_List) == 1):
-            Own_Gridsquare_Entry_Val.set(re.sub('[^A-Z]', '', GridSquare_Breakdown_List[0]))
+            Own_Gridsquare_Entry_Val.set(re.sub('[^A-R]', '', GridSquare_Breakdown_List[0]))
         elif (len(GridSquare_Breakdown_List) == 2):
-            Own_Gridsquare_Entry_Val.set(re.sub('[^A-Z]', '', GridSquare_Breakdown_List[0] + GridSquare_Breakdown_List[1]))
+            Own_Gridsquare_Entry_Val.set(re.sub('[^A-R]', '', GridSquare_Breakdown_List[0] + GridSquare_Breakdown_List[1]))
         elif (len(GridSquare_Breakdown_List) == 3):
-            Own_Gridsquare_Entry_Val.set(re.sub('[^A-Z]', '', GridSquare_Breakdown_List[0] + GridSquare_Breakdown_List[1]) + re.sub('[^0-9]', '', GridSquare_Breakdown_List[2]))
+            Own_Gridsquare_Entry_Val.set(re.sub('[^A-R]', '', GridSquare_Breakdown_List[0] + GridSquare_Breakdown_List[1]) + re.sub('[^0-9]', '', GridSquare_Breakdown_List[2]))
         elif (len(GridSquare_Breakdown_List) == 4):
-            Own_Gridsquare_Entry_Val.set(re.sub('[^A-Z]', '', GridSquare_Breakdown_List[0] + GridSquare_Breakdown_List[1]) + re.sub('[^0-9]', '', GridSquare_Breakdown_List[2] + GridSquare_Breakdown_List[3]))
+            Own_Gridsquare_Entry_Val.set(re.sub('[^A-R]', '', GridSquare_Breakdown_List[0] + GridSquare_Breakdown_List[1]) + re.sub('[^0-9]', '', GridSquare_Breakdown_List[2] + GridSquare_Breakdown_List[3]))
         elif (len(GridSquare_Breakdown_List) == 5):
-            Own_Gridsquare_Entry_Val.set(re.sub('[^A-Z]', '', GridSquare_Breakdown_List[0] + GridSquare_Breakdown_List[1]) + re.sub('[^0-9]', '', GridSquare_Breakdown_List[2] + GridSquare_Breakdown_List[3]) + re.sub('[^A-Z]', '', GridSquare_Breakdown_List[4]))
+            Own_Gridsquare_Entry_Val.set(re.sub('[^A-R]', '', GridSquare_Breakdown_List[0] + GridSquare_Breakdown_List[1]) + re.sub('[^0-9]', '', GridSquare_Breakdown_List[2] + GridSquare_Breakdown_List[3]) + re.sub('[^A-X]', '', GridSquare_Breakdown_List[4]))
         elif (len(GridSquare_Breakdown_List) == 6):
-            Own_Gridsquare_Entry_Val.set(re.sub('[^A-Z]', '', GridSquare_Breakdown_List[0] + GridSquare_Breakdown_List[1]) + re.sub('[^0-9]', '', GridSquare_Breakdown_List[2] + GridSquare_Breakdown_List[3]) + re.sub('[^A-Z]', '', GridSquare_Breakdown_List[4] + GridSquare_Breakdown_List[5]))
+            Own_Gridsquare_Entry_Val.set(re.sub('[^A-R]', '', GridSquare_Breakdown_List[0] + GridSquare_Breakdown_List[1]) + re.sub('[^0-9]', '', GridSquare_Breakdown_List[2] + GridSquare_Breakdown_List[3]) + re.sub('[^A-X]', '', GridSquare_Breakdown_List[4] + GridSquare_Breakdown_List[5]))
 
     def update_qso_font_size(self):
         QSO_Listbox.configure(font=("Consolas", Font_Size_Scale_Val.get(), "")) # Font_Size_Scale_Val.get()
@@ -848,12 +1031,21 @@ def settings_button_clicked():
         global Own_Gridsquare
         Own_Callsign = Own_Callsign_Entry_Val.get().upper()
         
-    def validate_contest_combobox(index, value, op):
-        global Contest_Name
-        Contest_Name = Contest_Select_Combo_Val.get()
-
+    def validate_contest_combobox(event):
+        global Contest_Number
+        global QSO_List
+        grid_has_4_chars = False
+        Contest_Number = Contest_Select_Combo.current()
+        for i in range(0,QSO_Listbox.size()):    
+            if ((len(QSO_List[i][GRIDSQUARE_POS]) < 6) and (CONTEST_DIST[Contest_Number])): grid_has_4_chars = True
+        if (grid_has_4_chars):
+            showwarning(title='Contest Config Warning', message='Warning: The QSO list contains 4-character grid squares, but the selected contest calls for 6-character grid squares. Score calculation will be wrong!')
+            Settings_Window.lift()
+        qso_listbox_dupe_check()
+        
     def settings_window_exit():
         global Own_Gridsquare
+        global Contest_Number
         Own_Callsign = Own_Callsign_Entry_Val.get().upper()
         Own_Gridsquare = Own_Gridsquare_Entry_Val.get()
         if (Enable_WSJT_1_Logging_Checkbox_Val.get() == "checked"): wsjt_1_logging_enabled = True
@@ -864,6 +1056,9 @@ def settings_button_clicked():
         Settings_Window.grab_release()
         update_grid_boxes_no_event()
         Grid_Map_Window.update()
+        qso_listbox_dupe_check()
+        Update_QSO_List_Banner()
+
         
     def Validate_WSJT_1_Checkbox():
         global wsjt_1_logging_enabled
@@ -885,27 +1080,26 @@ def settings_button_clicked():
 
     # Open dialog
     Settings_Window = Toplevel(QSO_List_Window)
-    Settings_Window.title("VCL - Settings")     
-    Settings_Window.geometry('{}x{}+{}+{}'.format(225,300,str(int(QSO_List_Window.geometry().split("+")[1])+100),str(int(QSO_List_Window.geometry().split("+")[2])+100)))
+    Settings_Window.title("VCL - Setup")     
+    Settings_Window.geometry('{}x{}+{}+{}'.format(350,300,str(int(QSO_List_Window.geometry().split("+")[1])+100),str(int(QSO_List_Window.geometry().split("+")[2])+100)))
     Settings_Window.configure(bg = Default_BG_Color)
     Settings_Window.resizable(0, 0) # Makes Log entry window size fixed
     Settings_Window.iconphoto(True, PhotoImage(file = "./images/VCL_Icon_350x350.png"))  # Only accepts .PNG files
     Settings_Window.grab_set()
     Settings_Window.protocol('WM_DELETE_WINDOW',settings_window_exit) 
 
-    Contest_Select_Label = Label(Settings_Window,text="VHF Contest", bg = Default_BG_Color)
+    Contest_Select_Label = Label(Settings_Window,text="Current Contest Type", bg = Default_BG_Color)
     Contest_Select_Label.place(x=10,y=10)
     Contest_Select_Label.pack()
-    Contest_Select_Combo_Val = StringVar(Settings_Window)      
-    Contest_Select_Combo_Val.trace('w',validate_contest_combobox) # will trigger on a selection change
-    Contest_Select_Combo = ttk.Combobox(Settings_Window, width = 25, textvariable=Contest_Select_Combo_Val)  
-    Contest_Select_Combo['values'] = ('','ARRL January VHF Contest','ARRL June VHF Contest','ARRL September VHF Contest')
-    if Contest_Name != "": Contest_Select_Combo_Val.set(Contest_Name)
+    Contest_Select_Combo = ttk.Combobox(Settings_Window, justify='center', width = 40)
+    Contest_Select_Combo['values'] = CONTESTS
+    Contest_Select_Combo.bind('<<ComboboxSelected>>', validate_contest_combobox)
     Contest_Select_Combo['state'] = 'readonly'
     Contest_Select_Combo.pack()
-    create_hint(Contest_Select_Combo,"A contest selection is required for score calculation.")
+    Contest_Select_Combo.current(Contest_Number)
+    create_hint(Contest_Select_Combo,'A contest selection is required for score calculation and proper Grid Square handling. If 6-character GridSquares are required, then the "MicroWave Contest" entry must be selected')
 
-    Callsign_Enter_Label = Label(Settings_Window,text="Your Callsign", bg = Default_BG_Color)
+    Callsign_Enter_Label = Label(Settings_Window,text="Your Call Sign", bg = Default_BG_Color)
     Callsign_Enter_Label.pack(pady = (8,0))
 
     Own_Callsign_Entry_Val = StringVar(Settings_Window)     
@@ -953,9 +1147,11 @@ def settings_button_clicked():
         Enable_WSJT_2_Logging_Checkbox_Val.set("unchecked")
     Enable_WSJT_2_Logging_Checkbox.pack(pady = (2,0))
     create_hint(Enable_WSJT_2_Logging_Checkbox,"This check box enables the logging of QSOs made the second instance of WSJT-X.")
+    Settings_Window.update()
 
 # Called when either the QSO Entry window or the QSO List window is closed. Signals the program exit.
 def process_app_exit():
+    global Contest_Number
     # Save all settings to the config file
     file = open("./config.sav",'w') # Open config file for reading
     file.write(Contest_File_Name + "\n")
@@ -965,7 +1161,7 @@ def process_app_exit():
     file.write(str(Stats_Window_Geometry_X) + "\n")
     file.write(str(Stats_Window_Geometry_Y) + "\n")
     file.write(QSO_Listbox.cget("font").split(" ")[1]  + "\n")
-    file.write(Contest_Name + "\n")
+    file.write(str(Contest_Number) + "\n")
     file.write(Own_Callsign + "\n")
     file.write(Own_Gridsquare + "\n")
     file.write(Grid_Map_Window.geometry() + "\n")
@@ -1009,7 +1205,6 @@ QSO_List_Window = Tk()
 QSO_List_Window.withdraw()
 Default_BG_Color = QSO_List_Window.cget('bg')
 QSO_List_Window.geometry('{}x{}'.format(485,486))
-QSO_List_Window.title("VCL - Log:  " + os.path.basename(Contest_File_Name).split(".VHFlog")[0])     
 QSO_List_Window.configure(bg = Default_BG_Color)
 QSO_List_Window.update()
 QSO_List_Window.iconphoto(True, PhotoImage(file = "./images/VCL_Icon_350x350.png"))  # Only accepts .PNG files
@@ -1026,11 +1221,12 @@ Splash_Window_Canvas = Canvas(Splash_Window_Frame, bd = 0, width=300, height=200
 BG_Image = PhotoImage(file = "./images/VCL_Icon_300x200_Darker.png")
 Splash_Window_Canvas.Map_Image = Splash_Window_Canvas.create_image(0,0, anchor=NW, image=BG_Image)
 Splash_Window_Canvas.pack(side=TOP,expand=True,fill=BOTH)
-Splash_Window_Canvas.create_text(150,40,text = "VHF Contest Logger",font="Verdana 14", fill="white")
-Splash_Window_Canvas.create_text(150,60,text = "Version " + SW_VERSION, font="Verdana 12", fill="white")
-Splash_Window_Canvas.create_text(150,100,text = "By Bert - VE2ZAZ / VA2IW",font="Verdana 10", fill="white")
-Splash_Window_Canvas.create_text(150,120,text = "Website: https://ve2zaz.net",font="Verdana 10", fill="white")
-Splash_Window_Canvas.create_text(150,140,text = "Github: https://github.com/VE2ZAZ",font="Verdana 10", fill="white")
+Splash_Window_Canvas.create_text(150,30,text = "VHF & Microwave",font="Verdana 15", fill="white")
+Splash_Window_Canvas.create_text(150,50,text = "Contest Logger",font="Verdana 15", fill="white")
+Splash_Window_Canvas.create_text(150,75,text = "Version " + SW_VERSION, font="Verdana 12", fill="white")
+Splash_Window_Canvas.create_text(150,110,text = "By Bert - VE2ZAZ / VA2IW",font="Verdana 10", fill="white")
+Splash_Window_Canvas.create_text(150,130,text = "Website: https://ve2zaz.net",font="Verdana 10", fill="white")
+Splash_Window_Canvas.create_text(150,150,text = "Github: https://github.com/VE2ZAZ",font="Verdana 10", fill="white")
 Splash_Window.update()
 create_hint(Splash_Window,"To clear this popup window, just click on it.")
 
@@ -1052,9 +1248,9 @@ Sort_By_Mode_Button = Button(button_frame1, text = "↓Mode", command = lambda: 
 Sort_By_Mode_Button.pack(side=LEFT,fill="x", expand=True)
 create_hint(Sort_By_Mode_Button,"Sorts the QSOs by alphabetical order of the mode (PH, CW, DIG,...) column.") 
 
-Sort_By_Call_Button = Button(button_frame1, text = "↓Callsign", command = lambda: sort_qsos(4), fg = "blue", font = "Verdana 8", bd = 2)
+Sort_By_Call_Button = Button(button_frame1, text = "↓Call Sign", command = lambda: sort_qsos(4), fg = "blue", font = "Verdana 8", bd = 2)
 Sort_By_Call_Button.pack(side=LEFT,fill="x", expand=True)
-create_hint(Sort_By_Call_Button,"Sorts the QSOs by alphabetical order of the callsign column.")
+create_hint(Sort_By_Call_Button,"Sorts the QSOs by alphabetical order of the call sign column.")
 
 Sort_By_Grid_Button = Button(button_frame1, text = "↓Grid", command = lambda: sort_qsos(5), fg = "blue", font = "Verdana 8", bd = 2)
 Sort_By_Grid_Button.pack(side=LEFT,fill="x", expand=True)
@@ -1073,7 +1269,7 @@ QSO_Listbox_Xscrollbar.configure(command = QSO_Listbox.xview)
 QSO_Listbox.configure(selectbackground="dodger blue")
 QSO_Listbox.configure(bg=Default_BG_Color)
 QSO_Listbox.bind('<<ListboxSelect>>', recall_qso_in_entry)  #<ButtonPress-1>
-create_hint(QSO_Listbox,"""The QSO List shows the QSOs that are saved in the logbook file. \n\nAny QSO displayed in red font flags a callsign-band-grid duplicate of a previous QSO displayed in orange. \n\nAlso, clicking on a QSO """
+create_hint(QSO_Listbox,"""The QSO List shows the QSOs that are saved in the logbook file. \n\nAny QSO displayed in red font flags a call_sign-band-grid duplicate of a previous QSO displayed in orange. \n\nAlso, clicking on a QSO """
                         """in the list will recall the information in the QSO capture window to save time in logging repeating stations on different bands.""")
 
 # Add a label used when there are no log files loaded at startup, but do not pack it yet.
@@ -1135,7 +1331,7 @@ create_hint(Cabrillo_Button,"Produces a Cabrillo-formatted file (.vhfcab) requir
 
 QSO_Entry_Window = Toplevel(QSO_List_Window)
 QSO_Entry_Window.title("VCL - QSO Capture")     
-QSO_Entry_Window.geometry('{}x{}'.format(260,140))
+QSO_Entry_Window.geometry('{}x{}'.format(260,150))
 QSO_Entry_Window.resizable(0, 0) # Makes Log entry window size fixed
 QSO_Entry_Window.iconphoto(True, PhotoImage(file = "./images/VCL_Icon_350x350.png"))  # Only accepts .PNG files
 first_element_offset = 12
@@ -1173,17 +1369,17 @@ Band_Combo_Label.grid(row=0, column=2, padx=2)
 Band_Combo_Val = StringVar(QSO_Entry_Window)     
 Band_Combo = ttk.Combobox(QSO_Upper_button_frame, width = 6, textvariable=Band_Combo_Val)
 Band_Combo.bind("<<ComboboxSelected>>", combobox_dupe_check)
-Band_Combo['values'] = ('50','70','144','222','432','902','1.2G','2.3G','3.4G','5.7G','10G','24G','47G','75G','122G','134G','241G','LIGHT')
+Band_Combo['values'] = (CONTEST_BANDS)
 Band_Combo['state'] = 'readonly'
 Band_Combo.set("50")
 Band_Combo.grid(row=1, column=2, padx=2)    
-create_hint(Band_Combo,"Amateur frequency band used for the QSO. Actively checked for callsign-Band-grid duplication against the QSO list.")
+create_hint(Band_Combo,"Amateur frequency band used for the QSO. Actively checked for call_sign-Band-grid duplication against the QSO list.")
 
 # Second row of widgets 
 QSO_Lower_button_frame = Frame(QSO_Entry_Window, relief=RAISED, borderwidth=0, height=100, width=100, bg = Default_BG_Color)
 QSO_Lower_button_frame.pack()
 
-CallSign_Entry_Label = Label(QSO_Lower_button_frame,text="Callsign", bg = Default_BG_Color)
+CallSign_Entry_Label = Label(QSO_Lower_button_frame,text="Call Sign", bg = Default_BG_Color)
 CallSign_Entry_Label.grid(row=2, column=0, padx=2)  
 CallSign_Entry_Val = StringVar(QSO_Lower_button_frame)     
 CallSign_Entry_Val.set("")      
@@ -1227,6 +1423,9 @@ Clear_QSO_Text_Button = Button(QSO_Buttons_Frame, text = "Cancel", command = cle
 Clear_QSO_Text_Button.bind('<Return>', clear_qso_returnkey_pressed)
 Clear_QSO_Text_Button.grid(row=0, column=1, padx=2 , pady=5)    
 create_hint(Clear_QSO_Text_Button,"Clears the information currently captured in the entry fields. Does not save or update the QSO.")
+
+Dist_Text_Label = Label(QSO_Entry_Window, text="Latest QSO Distance (Km): 0", bg = Default_BG_Color )
+Dist_Text_Label.pack()    
 
 # Create the World Grid map window and populate it with some widgets
 
@@ -1278,7 +1477,7 @@ def update_grid_boxes(event):
         Grid_Character_List = []
         for i in range(0, len(QSO_List)):
             if QSO_List[i][BAND_POS] == Band1_Combo_Val.get():
-                Grid_Character_List.append(list(QSO_List[i][GRIDSQUARE_POS]))
+                Grid_Character_List.append(list(QSO_List[i][GRIDSQUARE_POS][0:4]))
         for i in range(0, len(Grid_Character_List)):
             Coord_X = 10 * (ord(Grid_Character_List[i][0]) - 65) * Long_Grid_Pitch
             Coord_X = Coord_X + ((ord(Grid_Character_List[i][2]) - 48) * Long_Grid_Pitch)
@@ -1290,7 +1489,7 @@ def update_grid_boxes(event):
         Grid_Character_List = []
         for i in range(0, len(QSO_List)):
             if QSO_List[i][BAND_POS] == Band2_Combo_Val.get():
-                Grid_Character_List.append(list(QSO_List[i][GRIDSQUARE_POS]))
+                Grid_Character_List.append(list(QSO_List[i][GRIDSQUARE_POS][0:4]))
         for i in range(0, len(Grid_Character_List)):
             Coord_X = 10 * (ord(Grid_Character_List[i][0]) - 65) * Long_Grid_Pitch
             Coord_X = Coord_X + ((ord(Grid_Character_List[i][2]) - 48) * Long_Grid_Pitch)
@@ -1305,7 +1504,7 @@ def update_grid_boxes(event):
             Grid_Character_List = []
             for i in range(0, len(QSO_List)):
                 if QSO_List[i][BAND_POS] == Band3_Combo_Val.get():
-                    Grid_Character_List.append(list(QSO_List[i][GRIDSQUARE_POS]))
+                    Grid_Character_List.append(list(QSO_List[i][GRIDSQUARE_POS][0:4]))
             for i in range(0, len(Grid_Character_List)):
                 Coord_X = 10 * (ord(Grid_Character_List[i][0]) - 65) * Long_Grid_Pitch
                 Coord_X = Coord_X + ((ord(Grid_Character_List[i][2]) - 48) * Long_Grid_Pitch)
@@ -1323,7 +1522,7 @@ def update_grid_boxes(event):
             Grid_Character_List = []
             for i in range(0, len(QSO_List)):
                 if QSO_List[i][BAND_POS] == Band4_Combo_Val.get():
-                    Grid_Character_List.append(list(QSO_List[i][GRIDSQUARE_POS]))
+                    Grid_Character_List.append(list(QSO_List[i][GRIDSQUARE_POS][0:4]))
             for i in range(0, len(Grid_Character_List)):
                 Coord_X = 10 * (ord(Grid_Character_List[i][0]) - 65) * Long_Grid_Pitch
                 Coord_X = Coord_X + ((ord(Grid_Character_List[i][2]) - 48) * Long_Grid_Pitch)
@@ -1543,14 +1742,14 @@ Hint_Text_Box.config(state='disabled')
 try:
     file = open("./config.sav",'r') # Open config file for reading
     Contest_File_Name = file.readline()[:-1]
-    QSO_Entry_Window.geometry('{}x{}+{}+{}'.format(260,140,
+    QSO_Entry_Window.geometry('{}x{}+{}+{}'.format(260,150,
                             int(file.readline()[:-1]),
                             int(file.readline()[:-1])))
     QSO_List_Window.geometry(file.readline()[:-1])
     Stats_Window_Geometry_X = int(file.readline()[:-1])
     Stats_Window_Geometry_Y = int(file.readline()[:-1])    
     QSO_Listbox.configure(font=("Consolas",file.readline()[:-1] , "")) 
-    Contest_Name = file.readline()[:-1]
+    Contest_Number = int(file.readline()[:-1])
     Own_Callsign = file.readline()[:-1]
     Own_Gridsquare = file.readline()[:-1]
     Grid_Map_Window.geometry(file.readline()[:-1])
@@ -1576,7 +1775,7 @@ except IOError:     # Loading defaults
     Grid_Map_Window.geometry("500x500+300+300")
     No_Log_Loaded_Label.pack(expand=True, fill=None) # This makes the label appear
     QSO_List_Window.title("VCL - No Log Loaded")
-    Contest_Name = ""
+    Contest_Number = 0
     Own_Callsign = "NoCall"
     Own_Gridsquare = "FN00"
     
