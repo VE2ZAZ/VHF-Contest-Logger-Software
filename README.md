@@ -2,14 +2,36 @@
 ### Version 1.5
 ### By Bert, VE2ZAZ / VA2IW (https://ve2zaz.net)
 
-![The VHF & Microwave Contest Logger software windows](/images/All_Windows.png "The VHF & Microwave Contest Logger software windows")
+![The VHF & Microwave Contest Logger software windows](/images/All_Windows_1.6.png "The VHF & Microwave Contest Logger software windows")
 
-This amateur radio software provides the ability to log and display the QSOs (radio contacts) made during one of the ARRL VHF, NA VHF Sprints or various NA Microwave contests. It offers a simple and efficient interface customized for these contests. The interface is distributed over several independent windows, which allows the user to better organize the desktop. The software performs continuous "dupe checks" and score calculation. It also displays the worked grid squares using color boxes on a zoom-able Maidenhead grid world map. Both 4-character and 6-character grid square logging is supported. Digital QSOs made on the WSJT-X software can be automatically logged. To save the contest information, the script uses a simple CSV (comma-separated text) file; no complex database is used. Since this software is a python script, it can be run on Linux, Windows and Mac, once the python-3 interpreter is installed. Another benefit of being a Python script is that it uses a simple text file as source code. It can thus be easily improved and customized by the user. Though it is customized for VHF and Microwave contesting, this software can also be used for general logging of VHF/UHF contacts. 
+This amateur radio software provides the ability to log and display the QSOs (radio contacts) made during one of the ARRL VHF, NA VHF Sprints, CQ VHF or various NA Microwave contests. Rover operation is also supported. It offers a simple and efficient interface customized for these contests. The interface is distributed over several independent windows, which allows the user to better organize the desktop. The software performs continuous "dupe checks" and score calculation. It also displays the worked grid squares using color boxes and the worked stations on a zoom-able Maidenhead grid world map. Both 4-character and 6-character grid square logging is supported. Digital QSOs made on the WSJT-X software can be automatically logged. To save the contest information, the script uses a simple CSV (comma-separated text) file; no complex database is used. A Cabrillo-formatted file is produced to export the contest activity. Since this software is a python script, it can be run on Linux, Windows and Mac, once the python-3 interpreter is installed. Another benefit of being a Python script is that it uses a simple text file as source code. It can thus be easily improved and customized by the user. Though it is customized for VHF and Microwave contesting, this software can also be used for general logging of VHF/UHF contacts. 
 
 # Detailed Description
 Please see the [Help.pdf](./Help.pdf) file for all the details on this software package, the installation procedure and  for some additional screenshots of the software windows.
 
 # Release History
+### Version 1.6 (June 2025):
+- Added the CQ World Wide VHF Contests (both analog and digital). Made the ARRL June and September VHF Contests separate choices.
+- Added support for Rovers contesting in more than one grid.
+  - The operator's own gridsquare is now saved in QSO data and is listed in the QSO list.
+  - Duplicates and scoring are processed accordingly.
+  - A sort by operator gridsquare button is also added. 
+- Stats window: Added number of activated grids (for rovers) and corrected total distance to exclude dupes.
+- Added a QSO distance column in the QSO list, and added a distance sorting button in the header.
+- Removed the 70 MHz band, which is not a valid band for any of the North American VHF contests.
+- Added the contest name in the Cabrillo file. Value filled in based on selected contest.
+- Added separate criteria checks for dupe QSOs in ARRL 10GHz+ contest: greater than 16 km position change of either station, otherwise it is a dupe.
+- In QSO Capture window:
+  - Band and Mode pulldown menus now get populated with appropriate choices based on contest selection.
+  - Added bearing and distance information when a valid 4 or 6-character grid square is entered.
+  - Improved gridsquare format checks in both 4-character and 6-character checks.
+  - Added descriptive error and warning messages when a dupe QSO is found or when the grid square format is not met.
+  - Added spacebar jump between the Call Sign Entry and Gridsquare Entry fields and vice versa.
+  - Escape key now clears QSO data (same as clicking on Cancel button)
+- Setup window: Improved format checks on the gridsquare, with enforcing of 6-character operator grid square entry when the selected contest required it.
+- Gridsquare Map Window:
+  - Brought all controls inside a popup window that show up when right clicking on map.
+  - Added worked station position markers (diamonds) and callsigns. Callsign backgrounds use assigned band colors. Can be enabled/disabled with a checkmark.
 ### Version 1.5 (October 2023):
 - Added support for several North-American microwave contests and the VHF/UHF Sprints.
 - Added support for 6-character grid squares by selecting the proper contest description in the Setup window.
