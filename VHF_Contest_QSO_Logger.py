@@ -15,6 +15,29 @@
     
 # Release History
 #  - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
+# Version 1.6 (June 2025):
+# - Added the CQ World Wide VHF Contests (both analog and digital). Made the ARRL June and September VHF Contests separate choices.
+# - Added support for Rovers contesting in more than one grid.
+#   - The operator's own gridsquare is now saved in QSO data and is listed in the QSO list.
+#   - Duplicates and scoring are processed accordingly.
+#   - A sort by operator gridsquare button is also added. 
+# - Stats window: Added number of activated grids (for rovers) and corrected total distance to exclude dupes.
+# - Added a QSO distance column in the QSO list, and added a distance sorting button in the header.
+# - Removed the 70 MHz band, which is not a valid band for any of the North American VHF contests.
+# - Added the contest name in the Cabrillo file. Value filled in based on selected contest.
+# - Added separate criteria checks for dupe QSOs in ARRL 10GHz+ contest: greater than 16 km position change of either station, otherwise it is a dupe.
+# - In QSO Capture window:
+#   - Band and Mode pulldown menus now get populated with appropriate choices based on contest selection.
+#   - Added bearing and distance information when a valid 4 or 6-character grid square is entered.
+#   - Improved gridsquare format checks in both 4-character and 6-character checks.
+#   - Added descriptive error and warning messages when a dupe QSO is found or when the grid square format is not met.
+#   - Added spacebar jump between the Call Sign Entry and Gridsquare Entry fields and vice versa.
+#   - Escape key now clears QSO data (same as clicking on Cancel button)
+# - Setup window: Improved format checks on the gridsquare, with enforcing of 6-character operator grid square entry when the selected contest required it.
+# - Gridsquare Map Window:
+#   - Brought all controls inside a popup window that show up when right clicking on map.
+#   - Added worked station position markers (diamonds) and callsigns. Callsign backgrounds use assigned band colors. Can be enabled/disabled with a checkmark.
+#  - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
 # Version 1.5 (October 2023):
 # - Added support for several North-American microwave contests and the VHF/UHF Sprints.
 # - Added support for 6-character grid squares by selecting the proper contest description in the Setup window.
@@ -73,58 +96,109 @@ import sys
 sys.path.append("./great_circle_calculator")
 import great_circle_calculator as gcc
 import socket
-from math import sin, cos, sqrt, atan2, radians
+from math import sin, cos, sqrt, atan2, radians, degrees
 
 # C_O_N_S_T_A_N_T_S
 
-SW_VERSION = " 1.5  08/10/2023"
+SW_VERSION = " 1.6  2025/06/25"
 DATE_POS = 0
 TIME_POS = 1
 BAND_POS = 2
 MODE_POS = 3
 CALLSIGN_POS = 4
 GRIDSQUARE_POS = 5
+OWN_GRIDSQUARE_POS = 6
+DISTANCE_POS = 7
 X1_MAP_HEIGHT = 2880
 X1_MAP_WIDTH = 5760
 UDP_IP = ''
 UDP_PORT1 = 2237
 UDP_PORT2 = 2239
 
-CONTEST_BANDS = ['50','70','144','222','432','902','1.2G','2.3G','3.4G','5.7G','10G','24G','47G','75G','122G','134G','241G','LIGHT']
+CONTEST_BANDS = [[''],																												# 0
+                 ['50','144','222','432','902','1.2G','2.3G','3.4G','5.7G','10G','24G','47G','75G','122G','134G','241G','LIGHT'],	# 1
+                 ['50','144','222','432','902','1.2G','2.3G','3.4G','5.7G','10G','24G','47G','75G','122G','134G','241G','LIGHT'],	# 2
+                 ['50','144','222','432','902','1.2G','2.3G','3.4G','5.7G','10G','24G','47G','75G','122G','134G','241G','LIGHT'],	# 3
+                 ['50','144','222','432'],																							# 4
+                 ['902','1.2G','2.3G','3.4G','5.7G','10G','24G','47G','75G','122G','134G','241G','LIGHT'],							# 5
+                 ['222','432','902','1.2G','2.3G','3.4G','5.7G','10G','24G','47G','75G','122G','134G','241G','LIGHT'],				# 6
+                 ['10G','24G','47G','75G','122G','134G','241G','LIGHT'],															# 7
+                 ['50','144'],																										# 8
+                 ['50','144']]																										# 9
+
+CONTEST_MODES = [[''],							# 0																					# 0
+                 ['CW','PH','FM','RY','DIG'],	# 1
+                 ['CW','PH','FM','RY','DIG'],	# 2
+                 ['CW','PH','FM','RY','DIG'],	# 3
+                 ['CW','PH','FM','RY','DIG'],	# 4																						# 4
+                 ['CW','PH','FM','RY','DIG'],	# 5
+                 ['CW','PH','FM','RY','DIG'],	# 6
+                 ['CW','PH','FM','RY','DIG'],	# 7
+                 ['CW','PH','FM'],				# 8
+                 ['RY','DIG']]					# 9
 
 CONTESTS = ['Please Select Contest',                       # 0
             'ARRL January VHF Contest',                    # 1
-            'ARRL June/September VHF Contest',             # 2
-            'NA VHF/UHF Sprint',                           # 3
-            'NA Microwave Sprint (6-char. Grid Sq.)',      # 4
-            'ARRL 222 MHz+ Contest (6-char. Grid Sq.)',    # 5
-            'ARRL 10 GHz+ Contest (6-char. Grid Sq.)']     # 6
+            'ARRL June VHF Contest',                       # 2
+            'ARRL September VHF Contest',                  # 3            
+            'NA VHF/UHF Sprint',                           # 4
+            'NA Microwave Sprint (6-char. Grid Sq.)',      # 5
+            'ARRL 222 MHz+ Contest (6-char. Grid Sq.)',    # 6
+            'ARRL 10 GHz+ Contest (6-char. Grid Sq.)',     # 7
+            'CQ World Wide VHF Contest SSB/CW',            # 8
+            'CQ World Wide VHF Contest Digital']           # 9
 
-QSO_POINTS_TBL = [[0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0],               # 0
-                 [1, 1, 1, 2, 2, 4, 4, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8],                # 1
-                 [1, 1, 1, 2, 2, 3, 3, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4],                # 2
-                 [1, 1, 1, 1, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0],                # 3
-                 [0, 0, 0, 0, 0, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 0],                # 4
-                 [0, 0, 0, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 0],                # 5
-                 [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 100, 100, 100, 100, 100, 100, 100, 0]]  # 6
+CONTEST_CABRILLO_TITLE = ['',                  # 0
+                          'ARRL-VHF-JAN',      # 1
+                          'ARRL-VHF-JUN',      # 2
+                          'ARRL-VHF-SEP',      # 3
+                          '',                  # 4
+                          '',                  # 5
+                          'ARRL-222',          # 6
+                          'ARRL-10-GHZ',       # 7
+                          'CQ-VHF-SSBCW',      # 8
+                          'CQ-VHF-DIGI']       # 9
+
+QSO_POINTS_TBL = [[0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0],                # 0
+                  [1, 1, 2, 2, 4, 4, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8],                # 1
+                  [1, 1, 2, 2, 3, 3, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4],                # 2
+                  [1, 1, 2, 2, 3, 3, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4],                # 3
+                  [1, 1, 1, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0],                # 4
+                  [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0],                # 5
+                  [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0],                # 6
+                  [0, 0, 0, 0, 0, 0, 0, 0, 0, 100, 100, 100, 100, 100, 100, 100, 0],  # 7
+                  [1, 2, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0],                # 8
+                  [1, 2, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0]]                # 9
+
 
 # Band Factor only applies to 10 GHz and Up contest
-BAND_FACTOR =    [[0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0],           # 0
-                  [1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1],           # 1
-                  [1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1],           # 2
-                  [1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1],           # 3
-                  [1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1],           # 4
-                  [0, 0, 0, 2, 1, 4, 2, 6, 10, 10, 6, 20, 20, 20, 20, 20, 20, 0],   # 5
-                  [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1, 2, 3, 4, 5, 5, 5, 0]]           # 6
+BAND_FACTOR =    [[0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0],           # 0
+                  [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0],           # 1
+                  [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0],           # 2
+                  [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0],           # 3
+                  [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0],           # 4
+                  [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0],           # 5
+                  [0, 0, 2, 1, 4, 2, 6, 10, 10, 6, 20, 20, 20, 20, 20, 20, 0],   # 6
+                  [0, 0, 0, 0, 0, 0, 0, 0, 0, 1, 2, 3, 4, 5, 5, 5, 0],           # 7
+                  [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0],           # 8
+                  [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0]]           # 9
 
 # Distance factor: Contests with "True" will take the distance into account for score calculation
 CONTEST_DIST =  [False,   # 0
                  False,   # 1
                  False,   # 2
                  False,   # 3
-                 True,    # 4                
-                 True,    # 5         
-                 True]    # 6
+                 False,   # 4
+                 True,    # 5                
+                 True,    # 6         
+                 True,    # 7
+                 False,   # 8
+                 False]   # 9
+
+BAND1_COLOR = 'pink3'
+BAND2_COLOR = 'springgreen3'
+BAND3_COLOR = 'orange'
+BAND4_COLOR = 'cyan'
 
 # G_L_O_B_A_L  V_A_R_I_A_B_L_E_S
 
@@ -135,6 +209,7 @@ Edit_QSO_Index = 0
 Number_QSOs = 0
 Number_Grids = 0
 Number_Bands = 0
+Number_Activ_Grids = 0
 QSO_Points = 0
 Multiplier = 0
 Total_Dist = 0
@@ -142,6 +217,7 @@ Tot_Band_Factor_Dist = 0
 Score = 0
 Own_Callsign = ""
 Own_Gridsquare = ""
+Own_Gridsquare_Entry_Val = ""
 Contest_Number = 0
 Stats_Window_Geometry_X = 100
 Stats_Window_Geometry_Y = 100
@@ -157,6 +233,8 @@ wsjt_1_logging_enabled = False
 wsjt_2_logging_enabled = False
 Number_Dupes = 0
 Latest_QSO_Dist = 0
+display_grid_boxes = 1
+
 
 # M_A_I_N__C_O_D_E
 
@@ -165,21 +243,22 @@ def dupe_check():
     global QSO_Line
     global Edit_QSO_Action
     if (Edit_QSO_Action) and ((QSO_Line[BAND_POS] == Band_Combo_Val.get())   # Verifies if all fields are the same as the recalled QSO in Edit mode
-            and (QSO_Line[CALLSIGN_POS] == CallSign_Entry_Val.get()) and (CallSign_Entry_Val.get() != "")
-            and (QSO_Line[GRIDSQUARE_POS] == GridSquare_Entry_Val.get()) and (Band_Combo_Val.get() != "")
-            and (CallSign_Entry_Val.get() != "")):
-                QSO_Entry_Window.configure(bg = Default_BG_Color)    
-                QSO_Listbox.configure(selectbackground="dodger blue")
-                QSO_Listbox.selection_clear(0, END)
+    and (QSO_Line[CALLSIGN_POS] == CallSign_Entry_Val.get()) and (CallSign_Entry_Val.get() != "")
+    and (QSO_Line[GRIDSQUARE_POS] == GridSquare_Entry_Val.get()) and (Band_Combo_Val.get() != "")
+    and (CallSign_Entry_Val.get() != "")):
+        QSO_Entry_Window.configure(bg = Default_BG_Color)    
+        QSO_Listbox.configure(selectbackground="dodger blue")
+        QSO_Listbox.selection_clear(0, END)
     else:   # Now search for dupe QSO in QSO listbox.
         for i in range(0,QSO_Listbox.size()):
-            QSO_String = QSO_Listbox.get(i)
-            if (not(CONTEST_DIST[Contest_Number])
-            and (CallSign_Entry_Val.get()+" " in QSO_String)
-            and (CallSign_Entry_Val.get() != "")
-            and (GridSquare_Entry_Val.get()[0:4] in QSO_String)
-            and (GridSquare_Entry_Val.get() != "")
-            and ("  " + Band_Combo_Val.get() + "  " in QSO_String)):
+            QSO_String_List = QSO_Listbox.get(i).split() # Creates a list of the QSO line fields
+            if ((Contest_Number != 7)    # Not the ARRL 10 GHz+ Contest
+                 and (CallSign_Entry_Val.get() == QSO_String_List[4])
+                 and (CallSign_Entry_Val.get() != "")
+                 and (GridSquare_Entry_Val.get()[0:4] == QSO_String_List[5][0:4])
+                 and (GridSquare_Entry_Val.get() != "")
+                 and (Band_Combo_Val.get() == QSO_String_List[2])
+                 and (Own_Gridsquare[0:4] == QSO_String_List[6][0:4])):
                 QSO_Listbox.selection_clear(0, END)         # Dupe is found; set orange color to QSO Entry window widgets
                 QSO_Entry_Window.configure(bg = "sienna1")    
                 QSO_Lower_button_frame.configure(bg = "sienna1")    
@@ -195,13 +274,17 @@ def dupe_check():
                 QSO_Listbox.selection_set(i)
                 QSO_Listbox.index(i)
                 QSO_Listbox.see(i)
+                Error_Text_Label.lift()
+                Error_Text_Label.config(text = 'Warning: Duplicate QSO found', bg = "sienna1")                
                 break
-            elif ((CONTEST_DIST[Contest_Number])
-            and (CallSign_Entry_Val.get()+" " in QSO_String)
-            and (CallSign_Entry_Val.get() != "")
-            and (GridSquare_Entry_Val.get()[0:6] in QSO_String)
-            and (GridSquare_Entry_Val.get() != "")
-            and ("  " + Band_Combo_Val.get() + "  " in QSO_String)):
+            elif ((Contest_Number == 7)
+                 and (CallSign_Entry_Val.get() == QSO_String_List[4])
+                 and (CallSign_Entry_Val.get() != "")
+                 and (GridSquare_Entry_Val.get() != "")
+                 and (Band_Combo_Val.get() == QSO_String_List[2])
+                 and (len(GridSquare_Entry_Val.get()) == 6)
+                 and (not((Dist_Between_2_GridSquares(GridSquare_Entry_Val.get()[0:6],QSO_String_List[5][0:6]) > 16)
+                         or (Dist_Between_2_GridSquares(Own_Gridsquare[0:6],QSO_String_List[6][0:6]) > 16)))):  #Either station must have moved by at least 16 km for a QSO in the same grids to be valid
                 QSO_Listbox.selection_clear(0, END)         # Dupe is found; set orange color to QSO Entry window widgets
                 QSO_Entry_Window.configure(bg = "sienna1")    
                 QSO_Lower_button_frame.configure(bg = "sienna1")    
@@ -217,7 +300,9 @@ def dupe_check():
                 QSO_Listbox.selection_set(i)
                 QSO_Listbox.index(i)
                 QSO_Listbox.see(i)
-                break
+                Error_Text_Label.lift()
+                Error_Text_Label.config(text = 'Error: Either station must move > 16 km', bg = "sienna1")
+                break                
             else:      # No duplicate, set the various widget colors back to normal
                 QSO_Entry_Window.configure(bg = Default_BG_Color)    
                 QSO_Listbox.configure(selectbackground="dodger blue")
@@ -231,6 +316,10 @@ def dupe_check():
                 GridSquare_Entry_Label.configure(bg = Default_BG_Color)    
                 Mode_Combo_Label.configure(bg = Default_BG_Color)
                 QSO_Listbox.selection_clear(0, END)
+                Error_Text_Label.config(text = '')
+                Error_Text_Label.lower()
+                Error_Text_Label.config(bg =  Default_BG_Color)                
+
     QSO_Entry_Window.update()
 
 # This function is required because the ComboBox sends an event as parameter, unlike other widgets
@@ -243,26 +332,29 @@ def qso_listbox_dupe_check():
     global Contest_Number
     Number_Dupes = 0
     for i in range (0,QSO_Listbox.size()): QSO_Listbox.itemconfig(i, {'foreground':'black'}) # First, color all entries in black.
+
     for i in range (0,QSO_Listbox.size()): # Then, color the duplicated QSOs in red
         for j in range (i+1,QSO_Listbox.size()):  # Allows to not check a pair of QSOs twice
             QSO_1 =  QSO_Listbox.get(i).split(" ")
             while "" in QSO_1: QSO_1.remove("") # Removes empty strings from list
             QSO_2 =  QSO_Listbox.get(j).split(" ")
             while "" in QSO_2: QSO_2.remove("") # Removes empty strings from list
-            if (not(CONTEST_DIST[Contest_Number])
+            if ((Contest_Number != 7)    # Not the ARRL 10 GHz+ Contest
             and (QSO_1[BAND_POS] == QSO_2[BAND_POS])
             and (QSO_1[CALLSIGN_POS] == QSO_2[CALLSIGN_POS])
-            and (QSO_1[GRIDSQUARE_POS][0:4] == QSO_2[GRIDSQUARE_POS][0:4])):
+            and (QSO_1[GRIDSQUARE_POS][0:4] == QSO_2[GRIDSQUARE_POS][0:4])
+            and (QSO_1[OWN_GRIDSQUARE_POS][0:4] == QSO_2[OWN_GRIDSQUARE_POS][0:4])):
                 QSO_Listbox.itemconfig(i, {'foreground':'red'})
                 QSO_Listbox.itemconfig(j, {'foreground':'DarkOrange'})
                 QSO_Listbox.see(i)
-            elif ((CONTEST_DIST[Contest_Number])
+            elif ((Contest_Number == 7)
             and (QSO_1[BAND_POS] == QSO_2[BAND_POS])
             and (QSO_1[CALLSIGN_POS] == QSO_2[CALLSIGN_POS])
-            and (QSO_1[GRIDSQUARE_POS][0:6] == QSO_2[GRIDSQUARE_POS][0:6])):
+            and (not((Dist_Between_2_GridSquares(QSO_1[GRIDSQUARE_POS][0:6],QSO_2[GRIDSQUARE_POS][0:6]) > 16)
+                     or (Dist_Between_2_GridSquares(QSO_1[OWN_GRIDSQUARE_POS][0:6],QSO_2[OWN_GRIDSQUARE_POS][0:6]) > 16)))):  #Either station must have moved by at least 16 km for a QSO in the same grids to be valid
                 QSO_Listbox.itemconfig(i, {'foreground':'red'})
                 QSO_Listbox.itemconfig(j, {'foreground':'DarkOrange'})
-                QSO_Listbox.see(i)
+                QSO_Listbox.see(i)                  
     for i in range (0,QSO_Listbox.size()):
         if  (QSO_Listbox.itemcget(i, 'foreground') == 'red'):
             Number_Dupes = Number_Dupes + 1
@@ -302,12 +394,27 @@ def Dist_Between_2_GridSquares(gs1,gs2):
     distance = round(R * c)
     return distance
 
+def heading_between_grids(gs1, gs2):
+    lat1, lon1 = GridSquare_2_LatLong(gs1)
+    lat2, lon2 = GridSquare_2_LatLong(gs2)
+    # Convert to radians
+    phi1 = radians(lat1)
+    phi2 = radians(lat2)
+    delta_lambda = radians(lon2 - lon1)
+    x = sin(delta_lambda) * cos(phi2)
+    y = cos(phi1) * sin(phi2) - \
+        sin(phi1) * cos(phi2) * cos(delta_lambda)
+    bearing = degrees(atan2(x, y))
+    return (bearing + 360) % 360  # Normalize to 0–360
+
+
 # This function calculates the score based on the ARRL VHF Contest rules
 def calculate_score(Contest):
     global Number_QSOs
     global Number_Grids
     global Number_Bands
     global Number_Dupes
+    global Number_Activ_Grids
     global QSO_Points
     global Multiplier
     global Total_Dist
@@ -318,52 +425,66 @@ def calculate_score(Contest):
     
     Grid_List = []
     Band_List = []
+    Own_Grid_List = []
+    Unique_Own_Grid_List = []
     update_qso_list()
-    # QSO points and band factor calculations. Some contests consider QSO points as multipliers!
     QSO_Points = 0
+    Unique_Band_List= []
+    Multiplier = 0
+    
+    # List of unique grids from which the user operated.
+    for i in range(0,len(QSO_List)):
+        Own_Grid_List.append(QSO_List[i][OWN_GRIDSQUARE_POS][0:4]) # Only consider first 4 grid square characters)
+    Unique_Own_Grid_List = list(set(Own_Grid_List))  # creates a list of unique gridsquares (no duplicates)   
+    # QSO points and band factor calculations. Some contests consider QSO points as multipliers!
     for i in range(0,len(QSO_List)):
         Grid_List.append(QSO_List[i][GRIDSQUARE_POS])
         Band_List.append(QSO_List[i][BAND_POS])
         if not (QSO_Listbox.itemcget(i, 'foreground') == 'red'): # Rejects dupes in the QSO points calculation
-            QSO_Points += QSO_POINTS_TBL[Contest_Number][CONTEST_BANDS.index(QSO_List[i][BAND_POS])]
-    # Calculate Multipliers. Rule: The number of different grid squares contacted from each band.
-    # Each grid square counts as a multiplier on each band.
-    Unique_Band_List= []
-    Multiplier = 0
+            QSO_Points += QSO_POINTS_TBL[Contest_Number][CONTEST_BANDS[Contest_Number].index(QSO_List[i][BAND_POS])]
+    # Calculate Multipliers. Each grid square counts as a multiplier on each band
     Temp_List = []
-    Unique_Band_List = list(set(Band_List))  # creates a list of unique bands (no duplicates)
+    Unique_Band_List = list(set(Band_List))  # creates a list of unique bands worked (no duplicates)
     for i in range(0,len(Unique_Band_List)):
         Temp_List = []
         for j in range(0,len(QSO_List)):
             if Band_List[j] == Unique_Band_List[i]: Temp_List.append(Grid_List[j][0:4]) # Only consider first 4 grid square characters
         Multiplier += len(list(set(Temp_List))) # The sum of all unique grids contacted per band        
+    Number_Grids = Multiplier  # The sum of unique grids for all bands 
+    # For ARRL VHF contests, add rover multipliers (1 additional for each grid square worked from) 
+    if (1 <= Contest_Number <= 3) and (len(Unique_Own_Grid_List) > 1): Multiplier += len(Unique_Own_Grid_List)
     Number_QSOs = QSO_Listbox.size()
-    Number_Grids = len(set(Grid_List))   # Counts unique grids
-    Number_Bands = len(set(Band_List))   # Counts unique bands
+    Number_Bands = len(Unique_Band_List)      # Counts unique bands
+    Number_Activ_Grids = len(Unique_Own_Grid_List)
     # Calculate total distance with Band Factor. Band factor is for 10 GHz and Up Contest.
     Total_Dist = 0
     Tot_Band_Factor_Dist = 0
+    stuffed_own_gridsquare = Own_Gridsquare
+    if (len(Own_Gridsquare) == 4):   # 4-character operator's grid square must be stuffed to 6 characters
+        stuffed_own_gridsquare = Own_Gridsquare + 'LL'  # Assumes the center of the grid
     for i in range(0,len(QSO_List)):
-        if (len(QSO_List[i][GRIDSQUARE_POS]) == 4):   # 4-character grid square
-            stuffed_gridsquare = QSO_List[i][GRIDSQUARE_POS] + 'LL'  # Assumes the center of the grid
-            QSO_Dist = Dist_Between_2_GridSquares(Own_Gridsquare,stuffed_gridsquare)
-            Total_Dist += QSO_Dist
-        else:   # Full 6-character grid square
-            if (Own_Gridsquare == QSO_List[i][GRIDSQUARE_POS]):
-                Total_Dist += 1
-                Tot_Band_Factor_Dist += 1 * BAND_FACTOR[Contest_Number][CONTEST_BANDS.index(QSO_List[i][BAND_POS])]
-            else:
-                QSO_Dist = Dist_Between_2_GridSquares(Own_Gridsquare,QSO_List[i][GRIDSQUARE_POS])
+        if not (QSO_Listbox.itemcget(i, 'foreground') == 'red'): # Rejects dupes in the QSO points calculation
+            if (len(QSO_List[i][GRIDSQUARE_POS]) == 4):   # 4-character grid square
+                stuffed_gridsquare = QSO_List[i][GRIDSQUARE_POS] + 'LL'  # Assumes the center of the grid
+                QSO_Dist = Dist_Between_2_GridSquares(stuffed_own_gridsquare,stuffed_gridsquare)
                 Total_Dist += QSO_Dist
-                Tot_Band_Factor_Dist += QSO_Dist * BAND_FACTOR[Contest_Number][CONTEST_BANDS.index(QSO_List[i][BAND_POS])]                
+            else:   # Full 6-character grid square
+                if (Own_Gridsquare == QSO_List[i][GRIDSQUARE_POS]):
+                    Total_Dist += 1
+                    Tot_Band_Factor_Dist += 1 * BAND_FACTOR[Contest_Number][CONTEST_BANDS[Contest_Number].index(QSO_List[i][BAND_POS])]
+                else:
+                    QSO_Dist = Dist_Between_2_GridSquares(Own_Gridsquare,QSO_List[i][GRIDSQUARE_POS])
+                    Total_Dist += QSO_Dist
+                    # Calculate band factor distance for ARRL 222+ and 10G+ contests
+                    Tot_Band_Factor_Dist += QSO_Dist * BAND_FACTOR[Contest_Number][CONTEST_BANDS[Contest_Number].index(QSO_List[i][BAND_POS])]                
     # Calculate final score, depending on contest
     if not(CONTEST_DIST[Contest_Number]):   # Check of it is a 4 character grid square contest
         Score = QSO_Points * Multiplier
-    elif (Contest_Number == 4):
+    elif (Contest_Number == 5):   # NA Microwave Sprint (6-char. Grid Sq.)
         Score = Total_Dist
-    elif (Contest_Number == 5):
+    elif (Contest_Number == 6):   # ARRL 222 MHz+ Contest (6-char. Grid Sq.)
         Score = Tot_Band_Factor_Dist
-    elif (Contest_Number == 6):
+    elif (Contest_Number == 7):   # ARRL 10 GHz+ Contest (6-char. Grid Sq.)
         Score = Tot_Band_Factor_Dist + QSO_Points
 
 #Converts the Callsign to uppercase and check for duplicates on-the-fly
@@ -376,10 +497,17 @@ def validate_callsign(event):
 #Converts the grid square to uppercase and check for duplicates on-the-fly. Also returns whether the 2-letter/2digits(/2-letter) grid square format is met
 def validate_gridsquare(event):
     global Contest_Number
+    global Own_Gridsquare
     GridSquare_Entry_Val.set(GridSquare_Entry_Val.get().upper())
     if ((len(GridSquare_Entry_Val.get()) > 4) and not(CONTEST_DIST[Contest_Number])): GridSquare_Entry_Val.set(GridSquare_Entry_Val.get()[:-1])
     elif (len(GridSquare_Entry_Val.get()) > 6): GridSquare_Entry_Val.set(GridSquare_Entry_Val.get()[:-1])
     GridSquare_Breakdown_List = list(GridSquare_Entry_Val.get())
+    
+    if ((event == None) and (CONTEST_DIST[Contest_Number]) and (len(GridSquare_Breakdown_List) < 6)): return False  # Covers when the Save QSO button is clicked
+    if ((event == None) and (not(CONTEST_DIST[Contest_Number])) and (len(GridSquare_Breakdown_List) < 4)): return False  # Covers when the Save QSO button is clicked
+
+#    if (len(GridSquare_Breakdown_List) not in [4,6]): Dist_Text_Label.config(text = '')
+    Dist_Text_Label.config(text = '')
     if (len(GridSquare_Breakdown_List) == 1):
         GridSquare_Entry_Val.set(re.sub('[^A-R]', '', GridSquare_Breakdown_List[0]))
     elif (len(GridSquare_Breakdown_List) == 2):
@@ -388,18 +516,28 @@ def validate_gridsquare(event):
         GridSquare_Entry_Val.set(re.sub('[^A-R]', '', GridSquare_Breakdown_List[0] + GridSquare_Breakdown_List[1]) + re.sub('[^0-9]', '', GridSquare_Breakdown_List[2]))
     elif (len(GridSquare_Breakdown_List) == 4):
         GridSquare_Entry_Val.set(re.sub('[^A-R]', '', GridSquare_Breakdown_List[0] + GridSquare_Breakdown_List[1]) + re.sub('[^0-9]', '', GridSquare_Breakdown_List[2] + GridSquare_Breakdown_List[3]))
+        if   ((all('A' <= c <= 'Z' for c in GridSquare_Entry_Val.get()[0:2])
+          and (all('0' <= c <= '9' for c in GridSquare_Entry_Val.get()[2:4])))):
+            temp_own_gridsquare = Own_Gridsquare       
+            if (len(Own_Gridsquare) == 4): temp_own_gridsquare = temp_own_gridsquare + 'LL'        
+            Dist_Text_Label.config(text = 'Heading: ~' + str(round(heading_between_grids(temp_own_gridsquare, GridSquare_Entry_Val.get() + 'LL'))) + '°   Distance: ~' + str(round(Dist_Between_2_GridSquares(temp_own_gridsquare, GridSquare_Entry_Val.get() + 'LL'))) + ' km')
+            if (Own_Gridsquare == GridSquare_Entry_Val.get() + 'LL'): Dist_Text_Label.config(text = 'Heading: ---   Distance: ---')
+            dupe_check()
+            return True
+        else: return False
     if (CONTEST_DIST[Contest_Number]):
         if (len(GridSquare_Breakdown_List) == 5):
             GridSquare_Entry_Val.set(re.sub('[^A-R]', '', GridSquare_Breakdown_List[0] + GridSquare_Breakdown_List[1]) + re.sub('[^0-9]', '', GridSquare_Breakdown_List[2] + GridSquare_Breakdown_List[3]) + re.sub('[^A-X]', '', GridSquare_Breakdown_List[4]))
         elif (len(GridSquare_Breakdown_List) == 6):
             GridSquare_Entry_Val.set(re.sub('[^A-R]', '', GridSquare_Breakdown_List[0] + GridSquare_Breakdown_List[1]) + re.sub('[^0-9]', '', GridSquare_Breakdown_List[2] + GridSquare_Breakdown_List[3]) + re.sub('[^A-X]', '', GridSquare_Breakdown_List[4] + GridSquare_Breakdown_List[5]))
-            dupe_check()
-            return True
-    else:
-        dupe_check()
-        return True
-    dupe_check()
-    return False
+            if   (all('A' <= c <= 'Z' for c in GridSquare_Entry_Val.get()[0:2])
+              and all('0' <= c <= '9' for c in GridSquare_Entry_Val.get()[2:4])
+              and all('A' <= c <= 'Z' for c in GridSquare_Entry_Val.get()[4:6])):
+                Dist_Text_Label.config(text = 'Heading: ' + str(round(heading_between_grids(Own_Gridsquare, GridSquare_Entry_Val.get()))) + '°   Distance: ' + str(round(Dist_Between_2_GridSquares(Own_Gridsquare, GridSquare_Entry_Val.get()))) + ' km')
+                if (Own_Gridsquare == GridSquare_Entry_Val.get()): Dist_Text_Label.config(text = 'Heading: ---   Distance: ---')
+                dupe_check()
+                return True
+            else: return False
 
 # Filters out characters other than 0-9 and "-" in the time entry.
 def validate_date(event):
@@ -426,12 +564,15 @@ def log_file_save():
                  + QSO_Line[BAND_POS] + ","
                  + QSO_Line[MODE_POS] + ","
                  + QSO_Line[CALLSIGN_POS] + ","
-                 + QSO_Line[GRIDSQUARE_POS] + "\n")
+                 + QSO_Line[GRIDSQUARE_POS] +  ","
+                 + QSO_Line[OWN_GRIDSQUARE_POS] + ","
+                 + QSO_Line[DISTANCE_POS] + "\n")
     file.close()
     if (os.path.exists(Contest_File_Name.split(".VHFlog")[0])):
         os.remove(Contest_File_Name.split(".VHFlog")[0]) # Required to delete extraneous file created on open (...,'w'): It is a Python bug.
     update_qso_list()
     update_grid_boxes_no_event()
+    update_qso_dots()
 
 # Loads a selected log book file and populates the QSO listbox with the QSOs from the log book file.
 def log_file_load():
@@ -444,7 +585,8 @@ def log_file_load():
         while OneLine:
             QSO_Line_List = OneLine.split(",")
             QSO_Listbox.insert(END,QSO_Line_List[DATE_POS].ljust(12, ' ') + QSO_Line_List[TIME_POS].ljust(6, ' ') + QSO_Line_List[BAND_POS].ljust(6, ' ')
-                               + QSO_Line_List[MODE_POS].ljust(4, ' ') + QSO_Line_List[CALLSIGN_POS].ljust(10, ' ') + QSO_Line_List[GRIDSQUARE_POS][:-1].ljust(6, ' '))
+                               + QSO_Line_List[MODE_POS].ljust(4, ' ') + QSO_Line_List[CALLSIGN_POS].ljust(10, ' ') + QSO_Line_List[GRIDSQUARE_POS].ljust(8, ' ')
+                               + QSO_Line_List[OWN_GRIDSQUARE_POS].ljust(8, ' ') + QSO_Line_List[DISTANCE_POS][:-1].ljust(7, ' '))
             OneLine = file.readline()
         for i in range(0,QSO_Listbox.size()): # Color the QSO backgrounds in the listbox with alternate colors
             if (i%2==0): QSO_Listbox.itemconfigure(i, bg = "lightcyan2") 
@@ -453,7 +595,7 @@ def log_file_load():
         No_Log_Loaded_Label.pack_forget() # This makes the label disappear
         Update_QSO_List_Banner()
     except IOError:
-        No_Log_Loaded_Label.pack(expand=True, fill=None) # This makes the label appear
+        No_Log_Loaded_Label.pack(expand=True, fill=none) # This makes the label appear
         QSO_List_Window.title("VCL - No Log Loaded")
     update_qso_list()
     qso_listbox_dupe_check()
@@ -463,6 +605,7 @@ def save_qso_button_clicked():
     global Edit_QSO_Action
     global Stop_DateTime_Updates
     global Edit_QSO_Index
+    global Own_Gridsquare_Entry_Val
     # Add QSO to QSO listbox
     style= ttk.Style()
     style.theme_use('clam')
@@ -474,10 +617,17 @@ def save_qso_button_clicked():
         return
     elif (not validate_gridsquare(None)):
         GridSquare_Entry.configure(bg="orange")
+        Error_Text_Label.lift()
+        Error_Text_Label.config(text = 'Error: Wrong grid square format', bg =  Default_BG_Color)                
         return
     else:
         Callsign_Entry.configure(bg="white")
         GridSquare_Entry.configure(bg="white")
+    stuffed_gridsquare = GridSquare_Entry_Val.get()
+    stuffed_own_gridsquare = Own_Gridsquare
+    if (len(stuffed_gridsquare) == 4): stuffed_gridsquare = stuffed_gridsquare + 'LL'  # Assumes the center of the grid
+    if (len(stuffed_own_gridsquare) == 4): stuffed_own_gridsquare = stuffed_own_gridsquare + 'LL'  # Assumes the center of the grid
+    Latest_QSO_Dist = Dist_Between_2_GridSquares(stuffed_own_gridsquare,stuffed_gridsquare)
     if Edit_QSO_Action:
         QSO_Index = Edit_QSO_Index
         QSO_Listbox.delete(Edit_QSO_Index)        
@@ -487,14 +637,9 @@ def save_qso_button_clicked():
                        + Band_Combo_Val.get().ljust(6, ' ')
                        + Mode_Combo_Val.get().ljust(4, ' ')
                        + CallSign_Entry_Val.get().ljust(10, ' ')
-                       + GridSquare_Entry_Val.get().ljust(6, ' '))
-    if (len(GridSquare_Entry_Val.get()) == 4):   # 4-character grid square
-        stuffed_gridsquare = GridSquare_Entry_Val.get() + 'LL'  # Assumes the center of the grid
-        Latest_QSO_Dist = Dist_Between_2_GridSquares(Own_Gridsquare,stuffed_gridsquare)
-        Dist_Text_Label.config(text = 'Latest QSO Distance (Km): ~' + str(Latest_QSO_Dist))
-    else:
-        Latest_QSO_Dist = Dist_Between_2_GridSquares(Own_Gridsquare,GridSquare_Entry_Val.get())
-        Dist_Text_Label.config(text = 'Latest QSO Distance (Km): ' + str(Latest_QSO_Dist))
+                       + GridSquare_Entry_Val.get().ljust(8, ' ')
+                       + Own_Gridsquare.ljust(8, ' ')
+                       + str(Latest_QSO_Dist))
     for i in range(0,QSO_Listbox.size()):
         if (i%2==0): QSO_Listbox.itemconfigure(i, bg = "lightcyan2")  # even lines
         else: QSO_Listbox.itemconfigure(i, bg = "lightcyan3")   # Odd lines
@@ -515,7 +660,10 @@ def save_qso_button_clicked():
     Band_Combo_Label.configure(bg = Default_BG_Color)    
     CallSign_Entry_Label.configure(bg = Default_BG_Color)    
     GridSquare_Entry_Label.configure(bg = Default_BG_Color)    
-    Mode_Combo_Label.configure(bg = Default_BG_Color)    
+    Mode_Combo_Label.configure(bg = Default_BG_Color)
+    Error_Text_Label.lower()
+    Error_Text_Label.config(text = '')
+    Dist_Text_Label.config(bg =  Default_BG_Color)                
     QSO_Entry_Window.grab_release()
     Callsign_Entry.focus_set()
     qso_listbox_dupe_check()
@@ -532,6 +680,7 @@ def check_and_save_qso_from_wsjt_thread():
     global sock1
     global sock2
     global Contest_Number
+    global Own_Gridsquare
 
     def extract_to_QSO_Listbox():
         temp_split = log_string.split('<call:') # Index 1: string length and the rest of the string
@@ -587,7 +736,8 @@ def check_and_save_qso_from_wsjt_thread():
                             + wsjt_band.ljust(6, ' ')
                             + wsjt_mode.ljust(4, ' ')
                             + wsjt_callsign.ljust(10, ' ')
-                            + wsjt_gridsquare.ljust(6, ' '))
+                            + wsjt_gridsquare.ljust(8, ' ')
+                            + Own_Gridsquare.ljust(8, ' '))
         for i in range(0,QSO_Listbox.size()):
             if (i%2==0): QSO_Listbox.itemconfigure(i, bg = "lightcyan2")  # even lines
             else: QSO_Listbox.itemconfigure(i, bg = "lightcyan3")   # Odd lines
@@ -612,6 +762,7 @@ def check_and_save_qso_from_wsjt_thread():
         QSO_Entry_Window.grab_release()
         Callsign_Entry.focus_set()
         qso_listbox_dupe_check()
+        update_qso_dots
         Stop_DateTime_Updates = False
         Edit_QSO_Action = False
 
@@ -632,8 +783,8 @@ def check_and_save_qso_from_wsjt_thread():
     QSO_Entry_Window.after(100, check_and_save_qso_from_wsjt_thread)
 
 
-# This function erase the data that is already in the entry boxes of the Capture window.
-def clear_qso_text_button_clicked():
+# This function erases the data that is already in the entry boxes of the Capture window.
+def clear_qso_text():
     global Stop_DateTime_Updates
     global Edit_QSO_Action
     CallSign_Entry_Val.set("")
@@ -667,8 +818,8 @@ def create_hint(widget,hint_text):
 def save_qso_returnkey_pressed(event):
     save_qso_button_clicked()
     
-def clear_qso_returnkey_pressed(event):
-    clear_qso_text_button_clicked()
+def clear_qso_text_button_clicked(event):
+    clear_qso_text()
 
 # Creates the stats window and displays the statistics and score into it 
 def stats_button_clicked():
@@ -720,20 +871,22 @@ def stats_button_clicked():
         Contest_Results_Text2_Label.place(x=30,y=60)
         Contest_Results_Text3_Label = Label(Stats_Window, text="Num. Dupes:", bg = Default_BG_Color )
         Contest_Results_Text3_Label.place(x=30,y=80)
-        Contest_Results_Text4_Label = Label(Stats_Window, text="Num. Grids:", bg = Default_BG_Color)
+        Contest_Results_Text4_Label = Label(Stats_Window, text="Num. Worked Grids:", bg = Default_BG_Color)
         Contest_Results_Text4_Label.place(x=30,y=100)
-        Contest_Results_Text5_Label = Label(Stats_Window, text="Num. Bands:", bg = Default_BG_Color)
+        Contest_Results_Text5_Label = Label(Stats_Window, text="Num. Activated Grids:", bg = Default_BG_Color)
         Contest_Results_Text5_Label.place(x=30,y=120)
-        Contest_Results_Text6_Label = Label(Stats_Window, text="QSO Points:", bg = Default_BG_Color)
+        Contest_Results_Text6_Label = Label(Stats_Window, text="Num. Bands:", bg = Default_BG_Color)
         Contest_Results_Text6_Label.place(x=30,y=140)
-        Contest_Results_Text7_Label = Label(Stats_Window, text="Multipliers:", bg = Default_BG_Color)
+        Contest_Results_Text7_Label = Label(Stats_Window, text="QSO Points:", bg = Default_BG_Color)
         Contest_Results_Text7_Label.place(x=30,y=160)
-        Contest_Results_Text8_Label = Label(Stats_Window, text="Total Dist. (Km):", bg = Default_BG_Color)
+        Contest_Results_Text8_Label = Label(Stats_Window, text="Multipliers:", bg = Default_BG_Color)
         Contest_Results_Text8_Label.place(x=30,y=180)
-        Contest_Results_Text9_Label = Label(Stats_Window, text="Total Band Factor Dist:", bg = Default_BG_Color)
+        Contest_Results_Text9_Label = Label(Stats_Window, text="Total Dist. (Km):", bg = Default_BG_Color)
         Contest_Results_Text9_Label.place(x=30,y=200)
-        Contest_Results_Text10_Label = Label(Stats_Window, text="Total Score:", bg = Default_BG_Color, font='Helvetica 11 bold')
-        Contest_Results_Text10_Label.place(x=30,y=225)
+        Contest_Results_Text10_Label = Label(Stats_Window, text="Total Band Factor Dist:", bg = Default_BG_Color)
+        Contest_Results_Text10_Label.place(x=30,y=220)
+        Contest_Results_Text11_Label = Label(Stats_Window, text="Total Score:", bg = Default_BG_Color, font='Helvetica 11 bold')
+        Contest_Results_Text11_Label.place(x=30,y=245)
 
         Contest_Results_Number2_Label = Label(Stats_Window, text=Number_QSOs, bg = Default_BG_Color)
         Contest_Results_Number2_Label.place(x=200,y=60)
@@ -741,18 +894,20 @@ def stats_button_clicked():
         Contest_Results_Number3_Label.place(x=200,y=80)
         Contest_Results_Number4_Label = Label(Stats_Window, text=Number_Grids, bg = Default_BG_Color)
         Contest_Results_Number4_Label.place(x=200,y=100)
-        Contest_Results_Number5_Label = Label(Stats_Window, text=Number_Bands, bg = Default_BG_Color)
+        Contest_Results_Number5_Label = Label(Stats_Window, text=Number_Activ_Grids, bg = Default_BG_Color)
         Contest_Results_Number5_Label.place(x=200,y=120)
-        Contest_Results_Number6_Label = Label(Stats_Window, text=QSO_Points, bg = Default_BG_Color)
+        Contest_Results_Number6_Label = Label(Stats_Window, text=Number_Bands, bg = Default_BG_Color)
         Contest_Results_Number6_Label.place(x=200,y=140)
-        Contest_Results_Number7_Label = Label(Stats_Window, text=Multiplier, bg = Default_BG_Color)
+        Contest_Results_Number7_Label = Label(Stats_Window, text=QSO_Points, bg = Default_BG_Color)
         Contest_Results_Number7_Label.place(x=200,y=160)
-        Contest_Results_Number8_Label = Label(Stats_Window, text=Total_Dist, bg = Default_BG_Color)
+        Contest_Results_Number8_Label = Label(Stats_Window, text=Multiplier, bg = Default_BG_Color)
         Contest_Results_Number8_Label.place(x=200,y=180)
-        Contest_Results_Number9_Label = Label(Stats_Window, text=Tot_Band_Factor_Dist, bg = Default_BG_Color)
+        Contest_Results_Number9_Label = Label(Stats_Window, text=Total_Dist, bg = Default_BG_Color)
         Contest_Results_Number9_Label.place(x=200,y=200)
-        Contest_Results_Number10_Label = Label(Stats_Window, text=Score, bg = Default_BG_Color, font='Helvetica 11 bold')
-        Contest_Results_Number10_Label.place(x=200,y=225)
+        Contest_Results_Number10_Label = Label(Stats_Window, text=Tot_Band_Factor_Dist, bg = Default_BG_Color)
+        Contest_Results_Number10_Label.place(x=200,y=220)
+        Contest_Results_Number11_Label = Label(Stats_Window, text=Score, bg = Default_BG_Color, font='Helvetica 11 bold')
+        Contest_Results_Number11_Label.place(x=200,y=245)
 
         # This function is defined inside the stats_button_clicked function because it refers to its widgets
         def update_stats():
@@ -761,12 +916,13 @@ def stats_button_clicked():
             Contest_Results_Number2_Label.config(text = Number_QSOs)
             Contest_Results_Number3_Label.config(text = Number_Dupes)
             Contest_Results_Number4_Label.config(text = Number_Grids)
-            Contest_Results_Number5_Label.config(text = Number_Bands)
-            Contest_Results_Number6_Label.config(text = QSO_Points)
-            Contest_Results_Number7_Label.config(text = Multiplier)
-            Contest_Results_Number8_Label.config(text = Total_Dist)
-            Contest_Results_Number9_Label.config(text = Tot_Band_Factor_Dist)
-            Contest_Results_Number10_Label.config(text = Score)
+            Contest_Results_Number5_Label.config(text = Number_Activ_Grids)
+            Contest_Results_Number6_Label.config(text = Number_Bands)
+            Contest_Results_Number7_Label.config(text = QSO_Points)
+            Contest_Results_Number8_Label.config(text = Multiplier)
+            Contest_Results_Number9_Label.config(text = Total_Dist)
+            Contest_Results_Number10_Label.config(text = Tot_Band_Factor_Dist)
+            Contest_Results_Number11_Label.config(text = Score)
             Stats_Window.after(500, update_stats)
 
         # This function is defined inside the stats_button_clicked function because it refers to its widgets      
@@ -789,6 +945,7 @@ def open_contest_button_clicked():
     Update_QSO_List_Banner()
     update_qso_list()
     update_grid_boxes_no_event()
+    update_qso_dots()
     qso_listbox_dupe_check()
     grid_has_4_chars = False
     for i in range(0,QSO_Listbox.size()):    
@@ -853,6 +1010,7 @@ def edit_qso_button_clicked():
         else: QSO_Listbox.itemconfigure(i, bg = "lightcyan3")
     update_qso_list()
     qso_listbox_dupe_check()
+    update_qso_dots
 
 # Erase all QSOs from the QSO entry listbox and from the logbook file.
 def erase_log_button_clicked():
@@ -886,7 +1044,8 @@ def sort_qsos(field):
     for i in range(0,QSO_Listbox.size()):    
         QSO_Listbox.delete(i)
         QSO_Listbox.insert(i,QSO_List[i][DATE_POS].ljust(12, ' ') + QSO_List[i][TIME_POS].ljust(6, ' ') + QSO_List[i][BAND_POS].ljust(6, ' ')
-                        + QSO_List[i][MODE_POS].ljust(4, ' ') + QSO_List[i][CALLSIGN_POS].ljust(10, ' ') + QSO_List[i][GRIDSQUARE_POS].ljust(6, ' '))
+                        + QSO_List[i][MODE_POS].ljust(4, ' ') + QSO_List[i][CALLSIGN_POS].ljust(10, ' ') + QSO_List[i][GRIDSQUARE_POS].ljust(8, ' ')
+                        + QSO_List[i][OWN_GRIDSQUARE_POS].ljust(8, ' ') + QSO_List[i][DISTANCE_POS].ljust(7, ' ')) 
         if (i%2==0): QSO_Listbox.itemconfigure(i, bg = "lightcyan2") 
         else: QSO_Listbox.itemconfigure(i, bg = "lightcyan3") 
     log_file_save()
@@ -901,7 +1060,9 @@ def sort_qsos_by_date():
     for i in range(0,QSO_Listbox.size()):    
         QSO_Listbox.delete(i)
         QSO_Listbox.insert(i,QSO_List[i][DATE_POS].ljust(12, ' ') + QSO_List[i][TIME_POS].ljust(6, ' ') + QSO_List[i][BAND_POS].ljust(6, ' ')
-                        + QSO_List[i][MODE_POS].ljust(4, ' ') + QSO_List[i][CALLSIGN_POS].ljust(10, ' ') + QSO_List[i][GRIDSQUARE_POS].ljust(6, ' '))
+                        + QSO_List[i][MODE_POS].ljust(4, ' ') + QSO_List[i][CALLSIGN_POS].ljust(10, ' ') + QSO_List[i][GRIDSQUARE_POS].ljust(8, ' ')
+                        + QSO_List[i][OWN_GRIDSQUARE_POS].ljust(8, ' ') + QSO_List[i][DISTANCE_POS].ljust(7, ' '))
+   
         if (i%2==0): QSO_Listbox.itemconfigure(i, bg = "lightcyan2") 
         else: QSO_Listbox.itemconfigure(i, bg = "lightcyan3")
     log_file_save()
@@ -927,8 +1088,9 @@ def update_datetime_and_misc():
     global Stop_DateTime_Updates
     # Update date and time in the QSO entry fields
     if not Stop_DateTime_Updates:
-        Date_Entry_Val.set(datetime.datetime.utcnow().strftime('%Y-%m-%d'))
-        Time_Entry_Val.set(datetime.datetime.utcnow().strftime('%H%M'))
+        Date_Entry_Val.set(datetime.datetime.now(datetime.UTC).strftime('%Y-%m-%d'))
+        Time_Entry_Val.set(datetime.datetime.now(datetime.UTC).strftime('%H%M'))
+
     # Update QSO edit and delete buttons state (disabled if no QSO is selected in list, enabled otherwise)
     if (len(QSO_Listbox.curselection()) == 0):  # Checks if a line is selected
         Erase_QSO_Button['state'] = DISABLED
@@ -954,6 +1116,7 @@ def cabrillo_file_button_clicked():
     global Contest_Number
     global Own_Callsign
     global Own_Gridsquare
+    global Score
     calculate_score(Contest_Number)
     if (Own_Callsign == "") or (Own_Gridsquare == ""):
         showerror("Error!","Cabrillo file Generation requires that you first configure the contest settings. Please fill out the Settings window first.")
@@ -963,6 +1126,7 @@ def cabrillo_file_button_clicked():
     cabrillo_file.write("START-OF-LOG: 3.0\n")
     cabrillo_file.write("LOCATION: \n")
     cabrillo_file.write("CALLSIGN: " + Own_Callsign + "\n")
+    cabrillo_file.write("CONTEST: " + CONTEST_CABRILLO_TITLE[Contest_Number] + "\n")
     cabrillo_file.write("CATEGORY-ASSISTED: \n")
     cabrillo_file.write("CATEGORY-BAND: \n")
     cabrillo_file.write("CATEGORY-MODE: \n")
@@ -977,28 +1141,28 @@ def cabrillo_file_button_clicked():
     cabrillo_file.write("ADDRESS-POSTALCODE: \n")
     cabrillo_file.write("ADDRESS-COUNTRY: \n")
     cabrillo_file.write("EMAIL: \n")
+    cabrillo_file.write("CLAIMED-SCORE: " + str(Score) + "\n")
     for i in range(0,QSO_Listbox.size()):    
         QSO_Line = QSO_Listbox.get(i).split(" ")
         while "" in QSO_Line: QSO_Line.remove("") # Removes empty strings from list
         cabrillo_file.write("QSO: " + QSO_Line[BAND_POS] + " " + QSO_Line[MODE_POS]  + " " + QSO_Line[DATE_POS] + " "
-                            + QSO_Line[TIME_POS] + " " + Own_Callsign.upper() + " " + Own_Gridsquare.upper() + " "
+                            + QSO_Line[TIME_POS] + " " + Own_Callsign.upper() + " " + QSO_Line[OWN_GRIDSQUARE_POS] + " "
                             + QSO_Line[CALLSIGN_POS] + " "  + QSO_Line[GRIDSQUARE_POS] + "\n")
     cabrillo_file.write("END-OF-LOG:\n")
     cabrillo_file.close()
-    showinfo("Cabrillo File Generation Complete","The Cabrillo file was saved as: \n" + cabrillo_file.name)
-
+    showinfo("Cabrillo File Generation Complete","The Cabrillo file was saved as: \n" + cabrillo_file.name + "\nMake sure to fill in the header section of the Cabrillo file before submitting it.")
 
 # Creates and opens the Settings window, and treats the settings capture
 def settings_button_clicked():
     global Own_Callsign
     global Own_Gridsquare
+    global Own_Gridsquare_Entry_Val
     global Contest_Number
     global wsjt_1_logging_enabled
     global wsjt_2_logging_enabled
     global sock1
     global sock2
     global QSO_List
-
     
     #Converts the operator's grid square to uppercase. Also checks whether the 2-letter/2digits/2-letter grid square format is met
     def validate_setup_gridsquare(event):
@@ -1039,9 +1203,13 @@ def settings_button_clicked():
         for i in range(0,QSO_Listbox.size()):    
             if ((len(QSO_List[i][GRIDSQUARE_POS]) < 6) and (CONTEST_DIST[Contest_Number])): grid_has_4_chars = True
         if (grid_has_4_chars):
-            showwarning(title='Contest Config Warning', message='Warning: The QSO list contains 4-character grid squares, but the selected contest calls for 6-character grid squares. Score calculation will be wrong!')
+            showwarning(title='Contest Config Warning', message='Warning: The QSO list contains 4-character grid squares, but the selected contest calls for 6-character grid squares. Score calculation will be wrong!', parent=Settings_Window)
             Settings_Window.lift()
         qso_listbox_dupe_check()
+        Band_Combo['values'] = (CONTEST_BANDS[Contest_Number])
+        Band_Combo.set("")
+        Mode_Combo['values'] = (CONTEST_MODES[Contest_Number])
+        Mode_Combo.set("")
         
     def settings_window_exit():
         global Own_Gridsquare
@@ -1051,7 +1219,15 @@ def settings_button_clicked():
         if (Enable_WSJT_1_Logging_Checkbox_Val.get() == "checked"): wsjt_1_logging_enabled = True
         else: wsjt_1_logging_enabled = False
         if (Enable_WSJT_2_Logging_Checkbox_Val.get() == "checked"): wsjt_2_logging_enabled = True
-        else: wsjt_2_logging_enabled = False       
+        else: wsjt_2_logging_enabled = False
+        if (CONTEST_DIST[Contest_Number]) and len(Own_Gridsquare) == 4:
+            showwarning(title='Contest Config Error', message='Error: The operator grid square provided only has 4 characters, yet the selected contest requires a 6-character grid square. Please correct the error', parent=Settings_Window)
+            Settings_Window.lift()
+            return       
+        if (((not CONTEST_DIST[Contest_Number]) and len(Own_Gridsquare) not in [4,6]) or ((CONTEST_DIST[Contest_Number]) and len(Own_Gridsquare) != 6)):
+            showwarning(title='grid square format Error', message='Error: The operator grid square provided has a wrong format. Please correct the error', parent=Settings_Window)
+            Settings_Window.lift()
+            return       
         Settings_Window.withdraw()
         Settings_Window.grab_release()
         update_grid_boxes_no_event()
@@ -1108,7 +1284,7 @@ def settings_button_clicked():
     Own_Callsign_Entry.bind("<KeyRelease>", validate_settings_info)
     Own_Callsign_Entry.configure(width=10)
     Own_Callsign_Entry.pack()
-    create_hint(Own_Callsign_Entry,"Your callsign and gridsquare are required for Cabrillo file generation.")
+    create_hint(Own_Callsign_Entry,"Your callsign is required for proper Cabrillo file generation.")
 
     Gridsquare_Enter_Label = Label(Settings_Window,text="Your Grid Square", bg = Default_BG_Color)
     Gridsquare_Enter_Label.pack(pady = (8,0))
@@ -1119,7 +1295,7 @@ def settings_button_clicked():
     Own_Gridsquare_Entry.bind("<KeyRelease>", validate_setup_gridsquare)
     Own_Gridsquare_Entry.configure(width=10)
     Own_Gridsquare_Entry.pack()
-    create_hint(Own_Gridsquare_Entry,"Your callsign and gridsquare are required for Cabrillo file generation and location mapping. Entering a six-character gridsquare will give better location accuracy on the grid map.")
+    create_hint(Own_Gridsquare_Entry,"Your gridsquare is required for Cabrillo file generation and location/distance calculation. A six-character gridsquare is required for contests that use distances in the score calculation. For all other contests, it will still give better distance accuracy than a 4-character gridsquare.")
 
     Font_Size_Label = Label(Settings_Window,text="QSO List Font Size", bg = Default_BG_Color)
     Font_Size_Label.pack(pady = (8,0))
@@ -1184,7 +1360,16 @@ def process_app_exit():
         QSO_Entry_Window.destroy()
     except TclError:
         pass
-    
+
+#Process the spacebar entry (skip cursor to other edit box) during the QSO capture phase
+def Callsign_Entry_switch_focus_to_GridSquare_Entry(event):
+    GridSquare_Entry.focus_set()
+    return "break"  # Prevents the space from being inserted
+
+def GridSquare_Entry_switch_focus_to_Callsign_Entry(event):
+    Callsign_Entry.focus_set()
+    return "break"  # Prevents the space from being inserted
+
 #Sends an existing QSO to the QSO entry window. This is used when working the same station on different bands.
 def recall_qso_in_entry(event):
     if (QSO_Listbox.curselection()):  # Checks that one line is selected, otherwise gets triggered by deselection
@@ -1204,7 +1389,7 @@ def recall_qso_in_entry(event):
 QSO_List_Window = Tk()
 QSO_List_Window.withdraw()
 Default_BG_Color = QSO_List_Window.cget('bg')
-QSO_List_Window.geometry('{}x{}'.format(485,486))
+QSO_List_Window.geometry('{}x{}'.format(520,486))
 QSO_List_Window.configure(bg = Default_BG_Color)
 QSO_List_Window.update()
 QSO_List_Window.iconphoto(True, PhotoImage(file = "./images/VCL_Icon_350x350.png"))  # Only accepts .PNG files
@@ -1255,6 +1440,14 @@ create_hint(Sort_By_Call_Button,"Sorts the QSOs by alphabetical order of the cal
 Sort_By_Grid_Button = Button(button_frame1, text = "↓Grid", command = lambda: sort_qsos(5), fg = "blue", font = "Verdana 8", bd = 2)
 Sort_By_Grid_Button.pack(side=LEFT,fill="x", expand=True)
 create_hint(Sort_By_Grid_Button,"Sorts the QSOs by alphabetical order of the grid square column.")
+
+Sort_By_MyGrid_Button = Button(button_frame1, text = "↓MyGrid", command = lambda: sort_qsos(6), fg = "blue", font = "Verdana 8", bd = 2)
+Sort_By_MyGrid_Button.pack(side=LEFT,fill="x", expand=True)
+create_hint(Sort_By_MyGrid_Button,"Sorts the QSOs by alphabetical order of the operator's grid square column.")
+
+Sort_By_Distance_Button = Button(button_frame1, text = "↓Dist", command = lambda: sort_qsos(7), fg = "blue", font = "Verdana 8", bd = 2)
+Sort_By_Distance_Button.pack(side=LEFT,fill="x", expand=True)
+create_hint(Sort_By_Distance_Button,"Sorts the QSOs by the distance value column in kilometers.")
 
 QSO_Listbox = Listbox(QSO_List_Window, width=46, height=15, selectmode="single")  
 QSO_Listbox.pack(fill=BOTH, expand=True)
@@ -1334,6 +1527,7 @@ QSO_Entry_Window.title("VCL - QSO Capture")
 QSO_Entry_Window.geometry('{}x{}'.format(260,150))
 QSO_Entry_Window.resizable(0, 0) # Makes Log entry window size fixed
 QSO_Entry_Window.iconphoto(True, PhotoImage(file = "./images/VCL_Icon_350x350.png"))  # Only accepts .PNG files
+QSO_Entry_Window.bind("<Escape>", clear_qso_text_button_clicked)
 first_element_offset = 12
 
 # First row of widgets 
@@ -1344,7 +1538,8 @@ Date_Entry_Label = Label(QSO_Upper_button_frame,text="Date", bg = Default_BG_Col
 Date_Entry_Label.grid(row=0, column=0, padx=2)  
 Date_Entry_Val = StringVar(QSO_Entry_Window)      
 Date_Entry_Val.set(datetime.date.today())        
-Date_Entry = Entry(QSO_Upper_button_frame, textvariable=Date_Entry_Val, bg=Default_BG_Color)  
+Date_Entry = Entry(QSO_Upper_button_frame, textvariable=Date_Entry_Val, bg=Default_BG_Color)
+Date_Entry.bind("<Escape>", clear_qso_text_button_clicked)
 Date_Entry.bind("<FocusIn>",date_time_has_focus)
 Date_Entry.bind("<KeyRelease>", validate_date)
 Date_Entry.configure(width=10)
@@ -1354,9 +1549,10 @@ create_hint(Date_Entry,"QSO date entry: Automatically filled in with the current
 
 Time_Entry_Label = Label(QSO_Upper_button_frame,text="Time-UTC", bg = Default_BG_Color)
 Time_Entry_Label.grid(row=0, column=1, padx=2,)  
-Time_Entry_Val = StringVar(QSO_Entry_Window)     
-Time_Entry_Val.set(datetime.datetime.utcnow().strftime('%H:%M'))          
+Time_Entry_Val = StringVar(QSO_Entry_Window)
+Time_Entry_Val.set(datetime.datetime.now(datetime.UTC).strftime('%H:%M'))
 Time_Entry = Entry(QSO_Upper_button_frame, textvariable=Time_Entry_Val, bg=Default_BG_Color)  
+Time_Entry.bind("<Escape>", clear_qso_text_button_clicked)
 Time_Entry.bind("<FocusIn>",date_time_has_focus)
 Time_Entry.bind("<KeyRelease>", validate_time)
 Time_Entry.configure(width=10)
@@ -1368,10 +1564,11 @@ Band_Combo_Label = Label(QSO_Upper_button_frame,text="Band", bg = Default_BG_Col
 Band_Combo_Label.grid(row=0, column=2, padx=2)  
 Band_Combo_Val = StringVar(QSO_Entry_Window)     
 Band_Combo = ttk.Combobox(QSO_Upper_button_frame, width = 6, textvariable=Band_Combo_Val)
+Band_Combo.bind("<Escape>", clear_qso_text_button_clicked)
 Band_Combo.bind("<<ComboboxSelected>>", combobox_dupe_check)
-Band_Combo['values'] = (CONTEST_BANDS)
+Band_Combo['values'] = (CONTEST_BANDS[Contest_Number])
+Band_Combo.set("")
 Band_Combo['state'] = 'readonly'
-Band_Combo.set("50")
 Band_Combo.grid(row=1, column=2, padx=2)    
 create_hint(Band_Combo,"Amateur frequency band used for the QSO. Actively checked for call_sign-Band-grid duplication against the QSO list.")
 
@@ -1384,6 +1581,8 @@ CallSign_Entry_Label.grid(row=2, column=0, padx=2)
 CallSign_Entry_Val = StringVar(QSO_Lower_button_frame)     
 CallSign_Entry_Val.set("")      
 Callsign_Entry = Entry(QSO_Lower_button_frame, textvariable=CallSign_Entry_Val) 
+Callsign_Entry.bind("<Escape>", clear_qso_text_button_clicked)
+Callsign_Entry.bind("<space>", Callsign_Entry_switch_focus_to_GridSquare_Entry)
 Callsign_Entry.bind("<KeyRelease>", validate_callsign)
 Callsign_Entry.bind("<Return>", save_qso_returnkey_pressed)
 Callsign_Entry.configure(width=10)
@@ -1395,6 +1594,8 @@ GridSquare_Entry_Label.grid(row=2, column=1)
 GridSquare_Entry_Val = StringVar(QSO_Lower_button_frame)   
 GridSquare_Entry_Val.set("")        
 GridSquare_Entry = Entry(QSO_Lower_button_frame, textvariable=GridSquare_Entry_Val) 
+GridSquare_Entry.bind("<Escape>", clear_qso_text_button_clicked)
+GridSquare_Entry.bind("<space>", GridSquare_Entry_switch_focus_to_Callsign_Entry)
 GridSquare_Entry.bind("<KeyRelease>", validate_gridsquare)
 GridSquare_Entry.bind("<Return>", save_qso_returnkey_pressed)
 GridSquare_Entry.configure(width=10)
@@ -1405,9 +1606,10 @@ Mode_Combo_Label = Label(QSO_Lower_button_frame,text="Mode", bg = Default_BG_Col
 Mode_Combo_Label.grid(row=2, column=2, padx=2)  
 Mode_Combo_Val = StringVar(QSO_Lower_button_frame)      
 Mode_Combo = ttk.Combobox(QSO_Lower_button_frame, width = 6, textvariable=Mode_Combo_Val)
-Mode_Combo['values'] = ('CW','PH','FM','RY','DG')
+Mode_Combo['values'] = (CONTEST_MODES[Contest_Number])
+Mode_Combo.set("")
 Mode_Combo['state'] = 'readonly'
-Mode_Combo.set("PH")
+Mode_Combo.bind("<Escape>", clear_qso_text_button_clicked)
 Mode_Combo.grid(row=3, column=2, padx=2)    
 create_hint(Mode_Combo,"Modulation mode used for the QSO. Provided in the Cabrillo file submitted to the ARRL.")
 
@@ -1415,17 +1617,31 @@ create_hint(Mode_Combo,"Modulation mode used for the QSO. Provided in the Cabril
 QSO_Buttons_Frame = Frame(QSO_Entry_Window, relief=RAISED, borderwidth=0, height=100, width=100, bg = Default_BG_Color)
 QSO_Buttons_Frame.pack()
 Save_QSO_Button = Button(QSO_Buttons_Frame, text = "Save QSO", command = save_qso_button_clicked, fg = "dark green", font = "Verdana 8", bd = 2)
-Save_QSO_Button.bind('<Return>', save_qso_returnkey_pressed)
 Save_QSO_Button.grid(row=0, column=0, padx=2 , pady=5)    
 create_hint(Save_QSO_Button,"Saves the QSO as captured in the entry fields. When editing a QSO, updates the QSO list with the entry fields information.")
 
-Clear_QSO_Text_Button = Button(QSO_Buttons_Frame, text = "Cancel", command = clear_qso_text_button_clicked, fg = "red", font = "Verdana 8", bd = 2, height = 1)
-Clear_QSO_Text_Button.bind('<Return>', clear_qso_returnkey_pressed)
+Clear_QSO_Text_Button = Button(QSO_Buttons_Frame, text = "Cancel", command = clear_qso_text, fg = "red", font = "Verdana 8", bd = 2, height = 1)
 Clear_QSO_Text_Button.grid(row=0, column=1, padx=2 , pady=5)    
 create_hint(Clear_QSO_Text_Button,"Clears the information currently captured in the entry fields. Does not save or update the QSO.")
 
-Dist_Text_Label = Label(QSO_Entry_Window, text="Latest QSO Distance (Km): 0", bg = Default_BG_Color )
-Dist_Text_Label.pack()    
+Messages_Frame = Frame(QSO_Entry_Window, relief=RAISED, borderwidth=0, height=30, width=100, pady=0, bg = Default_BG_Color)
+Messages_Frame.pack()
+
+Dist_Text_Label = Label(Messages_Frame, text="", width = 35, bg = Default_BG_Color )   # 
+Dist_Text_Label.grid(row=0, column=0, padx=0 , pady=0)
+
+# Error message placed over Distance message
+Error_Text_Label = Label(Messages_Frame, text="", width = 35, bg = Default_BG_Color )   # a width of 35 hides the distance label underneath
+Error_Text_Label.grid(row=0, column=0, padx=0 , pady=0)
+Error_Text_Label.lower()
+
+
+def map_right_clicked(event):
+    Map_Config_Frame_PosX = 0
+    Map_Config_Frame_Posy = 0
+    Map_Config_Frame.place(x=Map_Config_Frame_PosX, y=Map_Config_Frame_Posy)
+    Map_Config_Frame.lift()
+    
 
 # Create the World Grid map window and populate it with some widgets
 
@@ -1445,8 +1661,9 @@ Map_Canvas.config(yscrollcommand = Sby.set, xscrollcommand = Sbx.set)
 Sbx.config(command=Map_Canvas.xview)
 Sby.config(command=Map_Canvas.yview)
 Map_Canvas.pack(side=TOP,expand=True,fill=BOTH)
+Map_Canvas.bind("<Button-3>", map_right_clicked)
 create_hint(Map_Canvas,"""Shows the worked amateur radio bands for each Maidenhead grid square on a world map. Map centering can be changed by dragging map """
-                        """(left-click and drag) or by using scroll bars.""")
+                        """(left-click and drag) or by using scroll bars. Right clicking on map displays the map settings window.""")
 
 Wait_For_Loading_Label = Label(Map_Canvas, text="Map is loading. Please wait...", bg = Default_BG_Color,font="Verdana 14")
 Wait_For_Loading_Label.pack(expand=True, fill=None) 
@@ -1457,7 +1674,39 @@ def create_qth_dot(x, y, r, canvasName): #center coordinates, radius
     y0 = y - r
     x1 = x + r
     y1 = y + r
-    return canvasName.create_oval(x0, y0, x1, y1,fill = "red",outline = "blue", tags='Distance_Azimuth')
+    return canvasName.create_oval(x0, y0, x1, y1,fill = "tomato",outline = "blue", tags='QTH_Dot')
+
+def create_qso_dot(x, y, r, canvasName): #center coordinates, radius
+    diamond_size = 3
+    return canvasName.create_polygon([x-diamond_size,y,x,y-diamond_size,x+diamond_size,y,x,y+diamond_size],
+                                      outline='blue', fill = 'red2', width=1, tags='Station_Dots')
+
+# def create_qso_text(x, y, call_text, canvasName):
+#     y_offset = 10
+#     x0 = x
+#     y0 = y + y_offset
+#     return canvasName.create_text(x0, y0, text=call_text, fill="red2", justify = "center", font=('Helvetica 8 bold'),tags='Station_Dots')
+
+def create_opaque_text(canvas, x, y, text, font, fg="black", bg="white", padding=1):
+    # Measure text size
+    temp = canvas.create_text(x, y, text=text, font=font, anchor="nw")
+    bbox = canvas.bbox(temp)
+    canvas.delete(temp)
+    if bbox:
+        x0, y0, x1, y1 = bbox
+        left_shift = round((x1 - x0)/2) - 4
+        x0 = x0 - left_shift - padding - 2
+#        x0 = x0 - padding
+        y0 -= padding -1
+        x1 = x1 - left_shift + padding - 4
+#        x1 = x1 + padding
+        y1 += padding - 3
+        # Draw background rectangle
+        rect = canvas.create_rectangle(x0, y0, x1, y1, fill=bg, outline="", tags='Station_Dots')
+        # Draw text on top
+        txt = canvas.create_text(x0, y0, text=text, font=font, fill=fg, anchor="nw", tags='Station_Dots')
+        return rect, txt
+    return None, None
 
 # Updates the worked grid color boxes on the map
 def update_grid_boxes(event):
@@ -1470,13 +1719,14 @@ def update_grid_boxes(event):
     global Distances_Checkbutton_Val
     global Own_Gridsquare_X
     global Own_Gridsquare_Y
+    global display_grid_boxes
     
     Map_Canvas.delete('Color_Boxes')
     # Band 1 color rectangles
     if (len(QSO_List) > 0):
         Grid_Character_List = []
         for i in range(0, len(QSO_List)):
-            if QSO_List[i][BAND_POS] == Band1_Combo_Val.get():
+            if (display_grid_boxes and (QSO_List[i][BAND_POS] == Band1_Combo_Val.get())):
                 Grid_Character_List.append(list(QSO_List[i][GRIDSQUARE_POS][0:4]))
         for i in range(0, len(Grid_Character_List)):
             Coord_X = 10 * (ord(Grid_Character_List[i][0]) - 65) * Long_Grid_Pitch
@@ -1484,11 +1734,11 @@ def update_grid_boxes(event):
             Coord_Y = Map_Height - (10 * (ord(Grid_Character_List[i][1]) - 65) * Lat_Grid_Pitch)
             Coord_Y = Coord_Y - ((ord(Grid_Character_List[i][3]) - 48) * Lat_Grid_Pitch)
             Map_Canvas.create_polygon([Coord_X+1,Coord_Y-1,Coord_X+Long_Grid_Pitch-1,Coord_Y-1,Coord_X+Long_Grid_Pitch-1,Coord_Y-Lat_Grid_Pitch+1,Coord_X+1,Coord_Y-Lat_Grid_Pitch+1],
-                                      outline='orchid3', fill = '', width=3, tags='Color_Boxes')
+                                      outline=BAND1_COLOR, fill = '', width=3, tags='Color_Boxes')
             
         Grid_Character_List = []
         for i in range(0, len(QSO_List)):
-            if QSO_List[i][BAND_POS] == Band2_Combo_Val.get():
+            if (display_grid_boxes and (QSO_List[i][BAND_POS] == Band2_Combo_Val.get())):
                 Grid_Character_List.append(list(QSO_List[i][GRIDSQUARE_POS][0:4]))
         for i in range(0, len(Grid_Character_List)):
             Coord_X = 10 * (ord(Grid_Character_List[i][0]) - 65) * Long_Grid_Pitch
@@ -1496,14 +1746,14 @@ def update_grid_boxes(event):
             Coord_Y = Map_Height - (10 * (ord(Grid_Character_List[i][1]) - 65) * Lat_Grid_Pitch)
             Coord_Y = Coord_Y - ((ord(Grid_Character_List[i][3]) - 48) * Lat_Grid_Pitch)
             Map_Canvas.create_polygon([Coord_X+4,Coord_Y-4,Coord_X+Long_Grid_Pitch-4,Coord_Y-4,Coord_X+Long_Grid_Pitch-4,Coord_Y-Lat_Grid_Pitch+4,Coord_X+4,Coord_Y-Lat_Grid_Pitch+4],
-                                      outline='springgreen3', fill = '', width=3, tags='Color_Boxes') #
+                                      outline=BAND2_COLOR, fill = '', width=3, tags='Color_Boxes') #
             
         if (Map_Scale_Factor != 1): # 4th band is too much for scale=1
             Band3_frame.config(bg='orange',relief=RAISED)
             Band3_Combo.pack(side=LEFT,expand=False,fill=BOTH, padx=2, pady=2)
             Grid_Character_List = []
             for i in range(0, len(QSO_List)):
-                if QSO_List[i][BAND_POS] == Band3_Combo_Val.get():
+                if (display_grid_boxes and (QSO_List[i][BAND_POS] == Band3_Combo_Val.get())):
                     Grid_Character_List.append(list(QSO_List[i][GRIDSQUARE_POS][0:4]))
             for i in range(0, len(Grid_Character_List)):
                 Coord_X = 10 * (ord(Grid_Character_List[i][0]) - 65) * Long_Grid_Pitch
@@ -1511,7 +1761,7 @@ def update_grid_boxes(event):
                 Coord_Y = Map_Height - (10 * (ord(Grid_Character_List[i][1]) - 65) * Lat_Grid_Pitch)
                 Coord_Y = Coord_Y - ((ord(Grid_Character_List[i][3]) - 48) * Lat_Grid_Pitch)
                 Map_Canvas.create_polygon([Coord_X+7,Coord_Y-7,Coord_X+Long_Grid_Pitch-7,Coord_Y-7,Coord_X+Long_Grid_Pitch-7,Coord_Y-Lat_Grid_Pitch+7,Coord_X+7,Coord_Y-Lat_Grid_Pitch+7],
-                                          outline='orange', fill = '', width=3, tags='Color_Boxes') #
+                                          outline=BAND3_COLOR, fill = '', width=3, tags='Color_Boxes') #
         else:
             Band3_Combo.pack_forget()
             Band3_frame.config(bg=Default_BG_Color,relief=FLAT)        
@@ -1521,7 +1771,7 @@ def update_grid_boxes(event):
             Band4_Combo.pack(side=LEFT,expand=False,fill=BOTH, padx=2, pady=2)
             Grid_Character_List = []
             for i in range(0, len(QSO_List)):
-                if QSO_List[i][BAND_POS] == Band4_Combo_Val.get():
+                if (display_grid_boxes and (QSO_List[i][BAND_POS] == Band4_Combo_Val.get())):
                     Grid_Character_List.append(list(QSO_List[i][GRIDSQUARE_POS][0:4]))
             for i in range(0, len(Grid_Character_List)):
                 Coord_X = 10 * (ord(Grid_Character_List[i][0]) - 65) * Long_Grid_Pitch
@@ -1530,18 +1780,48 @@ def update_grid_boxes(event):
                 Coord_Y = Coord_Y - ((ord(Grid_Character_List[i][3]) - 48) * Lat_Grid_Pitch)
                 Map_Canvas.create_polygon([Coord_X+10,Coord_Y-10,Coord_X+Long_Grid_Pitch-10,Coord_Y-10,Coord_X+Long_Grid_Pitch-10,Coord_Y-Lat_Grid_Pitch+10,
                                            Coord_X+10,Coord_Y-Lat_Grid_Pitch+10],
-                                          outline='cyan', fill = '', width=3, tags='Color_Boxes',stipple="gray50") #
+                                          outline=BAND4_COLOR, fill = '', width=3, tags='Color_Boxes',stipple="gray50") #
         else:
             Band4_Combo.pack_forget()
             Band4_frame.config(bg=Default_BG_Color,relief=FLAT)
-    if (Azimuth_Checkbutton_Val.get() == 1) or (Distances_Checkbutton_Val.get() == 1):
-        create_qth_dot(Own_Gridsquare_X,Own_Gridsquare_Y,5,Map_Canvas)
+    create_qth_dot(Own_Gridsquare_X,Own_Gridsquare_Y,5,Map_Canvas)
+    update_qso_dots()
     Grid_Map_Window.update()
+
+# Add contacted stations markers and labels
+def update_qso_dots():
+    global QSO_List
+    global Lat_Grid_Pitch
+    global Long_Grid_Pitch
+    global Map_Height
+    global Map_Scale_Factor
+    font = ('Helvetica 8 bold')
+    Map_Canvas.delete('Station_Dots')
+    create_qth_dot(Own_Gridsquare_X,Own_Gridsquare_Y,5,Map_Canvas)
+    if (Station_Checkbutton_Val.get() == 1):
+        for i in range(0, len(QSO_List)):
+            if (QSO_List[i][BAND_POS] == Band1_Combo_Val.get()): band_color = BAND1_COLOR
+            elif (QSO_List[i][BAND_POS] == Band2_Combo_Val.get()): band_color = BAND2_COLOR
+            elif (QSO_List[i][BAND_POS] == Band3_Combo_Val.get()): band_color = BAND3_COLOR
+            elif (QSO_List[i][BAND_POS] == Band4_Combo_Val.get()): band_color = BAND4_COLOR
+            else: band_color = 'white'
+            QSO_Gridsquare = QSO_List[i][GRIDSQUARE_POS]
+            QSO_Gridsquare_X = 10 * (ord(QSO_Gridsquare[0]) - 65) * Long_Grid_Pitch
+            QSO_Gridsquare_X = QSO_Gridsquare_X + ((ord(QSO_Gridsquare[2]) - 48) * Long_Grid_Pitch)     
+            if (len(QSO_Gridsquare) == 6): QSO_Gridsquare_X = QSO_Gridsquare_X + round((ord(QSO_Gridsquare[4]) - 65) * Long_Grid_Pitch/24)
+            else: QSO_Gridsquare_X = QSO_Gridsquare_X + 0.5 * Long_Grid_Pitch
+            QSO_Gridsquare_Y = Map_Height - (10 * (ord(QSO_Gridsquare[1]) - 65) * Lat_Grid_Pitch)
+            QSO_Gridsquare_Y = QSO_Gridsquare_Y - ((ord(QSO_Gridsquare[3]) - 48) * Lat_Grid_Pitch) # - 0.5 * Lat_Grid_Pitch
+            if (len(QSO_Gridsquare) == 6): QSO_Gridsquare_Y = QSO_Gridsquare_Y - round((ord(QSO_Gridsquare[5]) - 65) * Lat_Grid_Pitch/24)
+            else: QSO_Gridsquare_Y = QSO_Gridsquare_Y - 0.5 * Lat_Grid_Pitch
+            create_qso_dot(QSO_Gridsquare_X,QSO_Gridsquare_Y,3,Map_Canvas)
+            create_opaque_text(Map_Canvas, QSO_Gridsquare_X, QSO_Gridsquare_Y + 6, QSO_List[i][CALLSIGN_POS], font, 'black', band_color )  # 'red2'
+#            create_qso_text(QSO_Gridsquare_X, QSO_Gridsquare_Y, QSO_List[i][CALLSIGN_POS], Map_Canvas)
+        Grid_Map_Window.update()
 
 # Is used to call the grid box updates when no event is passed.
 def update_grid_boxes_no_event():
     update_grid_boxes("")
-
 
 def draw_dist_and_az_lines():
     global Map_Height
@@ -1583,91 +1863,124 @@ def draw_dist_and_az_lines():
                     canvas_text = Map_Canvas.create_text(Circle_Point_Pix_List[120*j+i][0] - (Circle_Point_Pix_List[120*j+i][0]-Circle_Point_Pix_List[120*(j-1)+i][0])/2, Circle_Point_Pix_List[120*j+i][1] - (Circle_Point_Pix_List[120*j+i][1]-Circle_Point_Pix_List[120*(j-1)+i][1])/2, text=i*3, font = "Verdana 7", anchor="center", fill="red", tags='Distance_Azimuth')
                     bgnd_box=Map_Canvas.create_rectangle(Map_Canvas.bbox(canvas_text),fill="white", outline="white", tags='Distance_Azimuth')
                     Map_Canvas.tag_lower(bgnd_box,canvas_text)
-    if (Azimuth_Checkbutton_Val.get() == 1) or (Distances_Checkbutton_Val.get() == 1):
-        create_qth_dot(Own_Gridsquare_X,Own_Gridsquare_Y,5,Map_Canvas)
+    update_qso_dots()
     Grid_Map_Window.update()
 
+def toggle_display_gridsquare_rect():
+    global display_grid_boxes
+    display_grid_boxes = Display_Band_Rectangles_Val.get()
+    update_grid_boxes_no_event()
+ 
+def close_map_config_button_clicked():
+    Map_Config_Frame.lower()
+ 
 # Now add the band color selection comboboxes to the World Grid map window
+Config_Frame_Width = 400
+Config_Frame_Height = 400
+Map_Config_Frame = Frame(Grid_Map_Window, width = Config_Frame_Width, height = Config_Frame_Height, relief=RAISED, borderwidth=3)
 
 Bands_Tuple = ('None','50','70','144','222','432','902','1.2G','2.3G','3.4G','5.7G','10G','24G','47G','75G','122G','134G','241G','LIGHT')
-Band1_frame = Frame(Grid_Map_Window, relief=RAISED, borderwidth=1)
-Band1_frame.config(bg='orchid3') #magenta
-Band1_frame.pack(side=LEFT, expand=False)
+
+Band_frame = Frame(Map_Config_Frame, relief=RAISED, borderwidth=1, padx=5, pady=5)
+Band_frame.pack(side=TOP, expand=False, fill = X, padx=2, pady=2)
+
+#Creating the "Display worked gridsquare colors" checkmark
+Display_Band_Rectangles_Val = IntVar(Band_frame)
+Display_Band_Rectangles_Val.set(True)
+Display_Band_Rectangles_Checkbutton = Checkbutton(Band_frame, text='Worked Gridsquares',variable=Display_Band_Rectangles_Val, onvalue=1, offvalue=0, command=toggle_display_gridsquare_rect)
+Display_Band_Rectangles_Checkbutton.pack(side=TOP,expand=False,fill=BOTH, padx=2, pady=2)
+
+Band1_frame = Frame(Band_frame, relief=RAISED, borderwidth=1)
+Band1_frame.config(bg=BAND1_COLOR) #magenta
+Band1_frame.pack(side=TOP, expand=False)
 Band1_Combo_Val = StringVar(Band1_frame)     
 Band1_Combo = ttk.Combobox(Band1_frame, width = 6, textvariable=Band1_Combo_Val)
 Band1_Combo.bind("<<ComboboxSelected>>", update_grid_boxes)
 Band1_Combo['values'] = Bands_Tuple
 Band1_Combo['state'] = 'readonly'
 Band1_Combo.set("BAND1")
-Band1_Combo.pack(side=LEFT,expand=False,fill=BOTH, padx=2, pady=2)  #,expand=True,fill=BOTH
+Band1_Combo.pack(side=TOP ,expand=False,fill=BOTH, padx=2, pady=2)  #,expand=True,fill=BOTH
 create_hint(Band1_Combo,"Allows to select which radio band to display with color #1.")
 
-Band2_frame = Frame(Grid_Map_Window, relief=RAISED, borderwidth=1)
-Band2_frame.config(bg='springgreen3')
-Band2_frame.pack(side=LEFT, expand=False)
+Band2_frame = Frame(Band_frame, relief=RAISED, borderwidth=1)
+Band2_frame.config(bg=BAND2_COLOR)
+Band2_frame.pack(side=TOP, expand=False)
 Band2_Combo_Val = StringVar(Band2_frame)     
 Band2_Combo = ttk.Combobox(Band2_frame, width = 6, textvariable=Band2_Combo_Val)
 Band2_Combo.bind("<<ComboboxSelected>>", update_grid_boxes)
 Band2_Combo['values'] = Bands_Tuple
 Band2_Combo['state'] = 'readonly'
 Band2_Combo.set("BAND2")
-Band2_Combo.pack(side=LEFT,expand=False,fill=BOTH, padx=2, pady=2)  #,expand=True,fill=BOTH
+Band2_Combo.pack(side=TOP,expand=False,fill=BOTH, padx=2, pady=2)  #,expand=True,fill=BOTH
 create_hint(Band2_Combo,"Allows to select which radio band to display with color #2.")
 
-Band3_frame = Frame(Grid_Map_Window, relief=RAISED, borderwidth=1)
-Band3_frame.config(bg='orange')
-Band3_frame.pack(side=LEFT, expand=False)
+Band3_frame = Frame(Band_frame, relief=RAISED, borderwidth=1)
+Band3_frame.config(bg=BAND3_COLOR)
+Band3_frame.pack(side=TOP, expand=False)
 Band3_Combo_Val = StringVar(Band3_frame)     
 Band3_Combo = ttk.Combobox(Band3_frame, width = 6, textvariable=Band3_Combo_Val)
 Band3_Combo.bind("<<ComboboxSelected>>", update_grid_boxes)
 Band3_Combo['values'] = Bands_Tuple
 Band3_Combo['state'] = 'readonly'
 Band3_Combo.set("BAND3")
-Band3_Combo.pack(side=LEFT,expand=False,fill=BOTH, padx=2, pady=2)  #,expand=True,fill=BOTH
+Band3_Combo.pack(side=TOP,expand=False,fill=BOTH, padx=2, pady=2)  #,expand=True,fill=BOTH
 create_hint(Band3_Combo,"Allows to select which radio band to display with color #3.")
 
-Band4_frame = Frame(Grid_Map_Window, relief=RAISED, borderwidth=1)
-Band4_frame.config(bg='cyan')
-Band4_frame.pack(side=LEFT, expand=False)
+Band4_frame = Frame(Band_frame, relief=RAISED, borderwidth=1)
+Band4_frame.config(bg=BAND4_COLOR)
+Band4_frame.pack(side=TOP, expand=False)
 Band4_Combo_Val = StringVar(Band4_frame)     
 Band4_Combo = ttk.Combobox(Band4_frame, width = 6, textvariable=Band4_Combo_Val)
 Band4_Combo.bind("<<ComboboxSelected>>", update_grid_boxes)
 Band4_Combo['values'] = Bands_Tuple
 Band4_Combo['state'] = 'readonly'
 Band4_Combo.set("BAND4")
-Band4_Combo.pack(side=LEFT,expand=False,fill=BOTH, padx=2, pady=2)  #,expand=True,fill=BOTH
+Band4_Combo.pack(side=TOP,expand=False,fill=BOTH, padx=2, pady=2)  #,expand=True,fill=BOTH
 create_hint(Band4_Combo,"Allows to select which radio band to display with color #4.")
 
 # Creating the frame and the zoom combobox in the World Grid map window
-World_Scale_frame = Frame(Grid_Map_Window, relief=RAISED, borderwidth=1)
-World_Scale_frame.pack(side=LEFT, expand=False)
-World_Scale_Label = Label(World_Scale_frame, text="Zoom:", bg = Default_BG_Color)
+World_Scale_frame = Frame(Map_Config_Frame, relief=RAISED, borderwidth=1)
+World_Scale_frame.pack(side=TOP, fill = X, padx=2, pady=2)
+World_Scale_Label = Label(World_Scale_frame, text="Map Zoom Factor", bg = Default_BG_Color)
 create_hint(World_Scale_Label,"Allows to select which scale factor (x1, x1.5 and x2) to use for displaying the world map. A new scale selection may take a moment to take effect.")
 World_Scale_Combo_Val = StringVar(World_Scale_frame)     
 World_Scale_Combo = ttk.Combobox(World_Scale_frame, width = 3, textvariable=World_Scale_Combo_Val)
 World_Scale_Combo['values'] = ('1','1.5','2')
 World_Scale_Combo['state'] = 'readonly'
 World_Scale_Combo.set("1")
-World_Scale_Combo.pack(side=RIGHT,expand=False,fill=BOTH, padx=4, pady=2)  #,expand=True,fill=BOTH
-World_Scale_Label.pack(side=RIGHT,expand=False,fill=BOTH, padx=3, pady=2)
+World_Scale_Combo.pack(side=LEFT,expand=False,fill=BOTH, padx=4, pady=2)  #,expand=True,fill=BOTH
+World_Scale_Label.pack(side=LEFT,expand=False,fill=BOTH, padx=2, pady=2)
 create_hint(World_Scale_Combo,"Allows to select which scale factor (x1, x1.5 and x2) to use for displaying the world map. A new scale selection may take a moment to take effect.")
 
 #Creating the "Display Distance circles" checkmark
-Distances_frame = Frame(Grid_Map_Window, relief=RAISED, borderwidth=1)
-Distances_frame.pack(side=LEFT, expand=False)
+Distances_frame = Frame(Map_Config_Frame, relief=RAISED, borderwidth=1)
+Distances_frame.pack(side=TOP, expand=False, fill = X, padx=2, pady=2)
 Distances_Checkbutton_Val = IntVar(Distances_frame)
-Distances_Checkbutton = Checkbutton(Distances_frame, text='Distances (Km)',variable=Distances_Checkbutton_Val, onvalue=1, offvalue=0, command=draw_dist_and_az_lines)
-Distances_Checkbutton.pack(side=RIGHT,expand=False,fill=BOTH, padx=7, pady=2)
+Distances_Checkbutton = Checkbutton(Distances_frame, text='Distance Circles (Km)',variable=Distances_Checkbutton_Val, onvalue=1, offvalue=0, command=draw_dist_and_az_lines)
+Distances_Checkbutton.pack(side=LEFT,expand=False,fill=BOTH, padx=2, pady=2)
 create_hint(Distances_Checkbutton,"Displays distance circles centered on your station location in increments of 500 kilometers")
 
 #Creating the "Azimuth Lines" checkmark
-Azimuth_frame = Frame(Grid_Map_Window, relief=RAISED, borderwidth=1)
-Azimuth_frame.pack(side=LEFT, expand=False)
-Azimuth_Checkbutton_Val  = IntVar(Azimuth_frame)
-Azimuth_Checkbutton = Checkbutton(Azimuth_frame, text='Azimuths',variable=Azimuth_Checkbutton_Val, onvalue=1, offvalue=0, command=draw_dist_and_az_lines)
-Azimuth_Checkbutton.pack(side=RIGHT,expand=False,fill=BOTH, padx=7, pady=2)
+Azimuth_frame = Frame(Map_Config_Frame, relief=RAISED, borderwidth=1)
+Azimuth_frame.pack(side=TOP, expand=False, fill = X, padx=2, pady=2)
+Azimuth_Checkbutton_Val = IntVar(Azimuth_frame)
+Azimuth_Checkbutton = Checkbutton(Azimuth_frame, text='Azimuth Lines',variable=Azimuth_Checkbutton_Val, onvalue=1, offvalue=0, command=draw_dist_and_az_lines)
+Azimuth_Checkbutton.pack(side=LEFT,expand=False,fill=BOTH, padx=2, pady=2)
 create_hint(Azimuth_Checkbutton,"Displays azimuth lines centered on your station location in increments of 15 degrees")
-        
+
+#Creating the Station dots checkmark
+Station_frame = Frame(Map_Config_Frame, relief=RAISED, borderwidth=1)
+Station_frame.pack(side=TOP, expand=False, fill = X, padx=2, pady=2)
+Station_Checkbutton_Val  = IntVar(Station_frame)
+Station_Checkbutton = Checkbutton(Station_frame, text='Worked Stations',variable=Station_Checkbutton_Val, onvalue=1, offvalue=0, command=update_qso_dots)
+Station_Checkbutton.pack(side=LEFT,expand=False,fill=BOTH, padx=2, pady=2)
+create_hint(Station_Checkbutton,"Displays station location using dots on the map")
+
+Close_Map_Config_Button = Button(Map_Config_Frame, text = "Close", command = close_map_config_button_clicked, font = "Verdana 8", bd = 2)
+Close_Map_Config_Button.pack(side=TOP, expand=False, fill = X, padx=2, pady=8)
+
+Map_Config_Frame.lower();
+
 # (Re)draws the World Grid map and restores the center map position to the same position after scaling
 def draw_map(event):
     global Lat_Grid_Pitch
@@ -1689,7 +2002,7 @@ def draw_map(event):
     Map_Height = X1_MAP_HEIGHT * Map_Scale_Factor
     Lat_Grid_Pitch = Map_Height / 180             # The correct grid pitch for the scaling factor
     Long_Grid_Pitch = Map_Width / 180
-    Y_Offset = Map_Scale_Factor * 2   # Offset needed to correct color boxes centering vs. world map grids.
+    Y_Offset = Map_Scale_Factor + 1
     Map_Canvas.delete("all")    # Erase everything on the canvas
     # Required maps is of equirectangular projection. Current map produced at https://www.simplemappr.net, and then touched up and scaled
     Grid_Map_Window.update()
@@ -1707,6 +2020,7 @@ def draw_map(event):
         Map_Canvas.yview_moveto(Old_Scrollbar_Y - 0.5 * int(re.split("[x+]",Grid_Map_Window.geometry())[1]) / Map_Height * (1 - Map_Scale_Factor / Old_Map_Scale_Factor)) #* (Map_Scale_Factor / Old_Map_Scale_Factor)
     draw_dist_and_az_lines()
     update_grid_boxes_no_event()
+    update_qso_dots()
     Wait_For_Loading_Label.pack_forget()
     Grid_Map_Window.update()
 
@@ -1742,7 +2056,7 @@ Hint_Text_Box.config(state='disabled')
 try:
     file = open("./config.sav",'r') # Open config file for reading
     Contest_File_Name = file.readline()[:-1]
-    QSO_Entry_Window.geometry('{}x{}+{}+{}'.format(260,150,
+    QSO_Entry_Window.geometry('{}x{}+{}+{}'.format(260,155,
                             int(file.readline()[:-1]),
                             int(file.readline()[:-1])))
     QSO_List_Window.geometry(file.readline()[:-1])
@@ -1765,8 +2079,13 @@ try:
     if (file.readline()[:-1] == 'True'): wsjt_2_logging_enabled = True
     else: wsjt_2_logging_enabled = False
     file.close()
-    log_file_load()
-    World_Scale_Combo_Val.set(Map_Scale_Factor)    
+    if (Contest_File_Name != 'No Log loaded...'): log_file_load()
+    World_Scale_Combo_Val.set(Map_Scale_Factor)
+    Band_Combo['values'] = (CONTEST_BANDS[Contest_Number])
+    Band_Combo.set("")
+    Mode_Combo['values'] = (CONTEST_MODES[Contest_Number])
+    Mode_Combo.set("")
+    
 except IOError:     # Loading defaults
     showerror("Error: No Config found", "Error, no configuration file was found. Reverting to defaults")
     Contest_File_Name = "No Log loaded..."
@@ -1801,6 +2120,7 @@ Splash_Window.deiconify()   # Show the splash window.
 update_qso_list()
 draw_map(None)
 update_grid_boxes_no_event()
+update_qso_dots()
 Grid_Map_Window.update()
 qso_listbox_dupe_check()
 Splash_Window.withdraw()   # Hide the splash window.
