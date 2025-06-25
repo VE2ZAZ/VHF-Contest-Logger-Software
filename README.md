@@ -1,5 +1,5 @@
 # VHF & Microwave Contest Logger Software
-### Version 1.5
+### Version 1.6 (June 2025)
 ### By Bert, VE2ZAZ / VA2IW (https://ve2zaz.net)
 
 ![The VHF & Microwave Contest Logger software windows](/images/All_Windows_1.6.png "The VHF & Microwave Contest Logger software windows")
