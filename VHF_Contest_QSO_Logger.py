@@ -15,6 +15,12 @@
     
 # Release History
 #  - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
+# Version 1.61 (August 2025):
+# - Corrected misbehavior of logging a WSJT-X QSO. Logging a digital QSO would not include the distance between the two grid squares.
+#   This had the consequence of erasing the logbook file. It also caused grid square map misbehavior.
+# - For digital QSOs, both "DG" and "DIG" were used for the mode. Only "DG" is allowed in Cabrillo. Corrected.
+# - Corrected a score calculation error for the distance-based contests.
+#  - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
 # Version 1.6 (June 2025):
 # - Added the CQ World Wide VHF Contests (both analog and digital). Made the ARRL June and September VHF Contests separate choices.
 # - Added support for Rovers contesting in more than one grid.
@@ -100,7 +106,7 @@ from math import sin, cos, sqrt, atan2, radians, degrees
 
 # C_O_N_S_T_A_N_T_S
 
-SW_VERSION = " 1.6  2025/06/25"
+SW_VERSION = " 1.61  2025/08/04"
 DATE_POS = 0
 TIME_POS = 1
 BAND_POS = 2
@@ -115,28 +121,6 @@ UDP_IP = ''
 UDP_PORT1 = 2237
 UDP_PORT2 = 2239
 
-CONTEST_BANDS = [[''],																												# 0
-                 ['50','144','222','432','902','1.2G','2.3G','3.4G','5.7G','10G','24G','47G','75G','122G','134G','241G','LIGHT'],	# 1
-                 ['50','144','222','432','902','1.2G','2.3G','3.4G','5.7G','10G','24G','47G','75G','122G','134G','241G','LIGHT'],	# 2
-                 ['50','144','222','432','902','1.2G','2.3G','3.4G','5.7G','10G','24G','47G','75G','122G','134G','241G','LIGHT'],	# 3
-                 ['50','144','222','432'],																							# 4
-                 ['902','1.2G','2.3G','3.4G','5.7G','10G','24G','47G','75G','122G','134G','241G','LIGHT'],							# 5
-                 ['222','432','902','1.2G','2.3G','3.4G','5.7G','10G','24G','47G','75G','122G','134G','241G','LIGHT'],				# 6
-                 ['10G','24G','47G','75G','122G','134G','241G','LIGHT'],															# 7
-                 ['50','144'],																										# 8
-                 ['50','144']]																										# 9
-
-CONTEST_MODES = [[''],							# 0																					# 0
-                 ['CW','PH','FM','RY','DIG'],	# 1
-                 ['CW','PH','FM','RY','DIG'],	# 2
-                 ['CW','PH','FM','RY','DIG'],	# 3
-                 ['CW','PH','FM','RY','DIG'],	# 4																						# 4
-                 ['CW','PH','FM','RY','DIG'],	# 5
-                 ['CW','PH','FM','RY','DIG'],	# 6
-                 ['CW','PH','FM','RY','DIG'],	# 7
-                 ['CW','PH','FM'],				# 8
-                 ['RY','DIG']]					# 9
-
 CONTESTS = ['Please Select Contest',                       # 0
             'ARRL January VHF Contest',                    # 1
             'ARRL June VHF Contest',                       # 2
@@ -148,6 +132,51 @@ CONTESTS = ['Please Select Contest',                       # 0
             'CQ World Wide VHF Contest SSB/CW',            # 8
             'CQ World Wide VHF Contest Digital']           # 9
 
+CONTEST_BANDS = [[''],																												# 0
+                 ['50','144','222','432','902','1.2G','2.3G','3.4G','5.7G','10G','24G','47G','75G','122G','134G','241G','LIGHT'],	# 1
+                 ['50','144','222','432','902','1.2G','2.3G','3.4G','5.7G','10G','24G','47G','75G','122G','134G','241G','LIGHT'],	# 2
+                 ['50','144','222','432','902','1.2G','2.3G','3.4G','5.7G','10G','24G','47G','75G','122G','134G','241G','LIGHT'],	# 3
+                 ['50','144','222','432'],																							# 4
+                 ['902','1.2G','2.3G','3.4G','5.7G','10G','24G','47G','75G','122G','134G','241G','LIGHT'],							# 5
+                 ['222','432','902','1.2G','2.3G','3.4G','5.7G','10G','24G','47G','75G','122G','134G','241G','LIGHT'],				# 6
+                 ['10G','24G','47G','75G','122G','134G','241G','LIGHT'],															# 7
+                 ['50','144'],																										# 8
+                 ['50','144']]																										# 9
+
+# Band Factor only applies to "10 GHz and Up" and the "222 and Up" contests
+BAND_FACTOR =    [[0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0],           # 0
+                  [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0],           # 1
+                  [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0],           # 2
+                  [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0],           # 3                                       # 3
+                  [0, 0, 0, 0],                       							 # 4
+                  [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0],           			 # 5
+                  [2, 1, 4, 2, 6, 10, 10, 6, 20, 20, 20, 20, 20, 20, 0],         # 6
+                  [1, 2, 3, 4, 5, 5, 5, 0],                                      # 7
+                  [0, 0],           											 # 8
+                  [0, 0]]           										     # 9
+
+QSO_POINTS_TBL = [[0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0],      # 0
+                  [1, 1, 2, 2, 4, 4, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8],      # 1
+                  [1, 1, 2, 2, 3, 3, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4],      # 2
+                  [1, 1, 2, 2, 3, 3, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4],      # 3
+                  [1, 1, 1, 1],                								# 4
+                  [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0],                	# 5
+                  [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0],            # 6
+                  [100, 100, 100, 100, 100, 100, 100, 0],  					# 7
+                  [1, 2],                									# 8
+                  [1, 2]]                									# 9
+
+CONTEST_MODES = [[''],							# 0																					# 0
+                 ['CW','PH','FM','RY','DG'],	# 1
+                 ['CW','PH','FM','RY','DG'],	# 2
+                 ['CW','PH','FM','RY','DG'],	# 3
+                 ['CW','PH','FM','RY','DG'],	# 4																						# 4
+                 ['CW','PH','FM','RY','DG'],	# 5
+                 ['CW','PH','FM','RY','DG'],	# 6
+                 ['CW','PH','FM','RY','DG'],	# 7
+                 ['CW','PH','FM'],				# 8
+                 ['RY','DG']]					# 9
+
 CONTEST_CABRILLO_TITLE = ['',                  # 0
                           'ARRL-VHF-JAN',      # 1
                           'ARRL-VHF-JUN',      # 2
@@ -158,30 +187,6 @@ CONTEST_CABRILLO_TITLE = ['',                  # 0
                           'ARRL-10-GHZ',       # 7
                           'CQ-VHF-SSBCW',      # 8
                           'CQ-VHF-DIGI']       # 9
-
-QSO_POINTS_TBL = [[0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0],                # 0
-                  [1, 1, 2, 2, 4, 4, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8],                # 1
-                  [1, 1, 2, 2, 3, 3, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4],                # 2
-                  [1, 1, 2, 2, 3, 3, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4],                # 3
-                  [1, 1, 1, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0],                # 4
-                  [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0],                # 5
-                  [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0],                # 6
-                  [0, 0, 0, 0, 0, 0, 0, 0, 0, 100, 100, 100, 100, 100, 100, 100, 0],  # 7
-                  [1, 2, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0],                # 8
-                  [1, 2, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0]]                # 9
-
-
-# Band Factor only applies to 10 GHz and Up contest
-BAND_FACTOR =    [[0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0],           # 0
-                  [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0],           # 1
-                  [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0],           # 2
-                  [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0],           # 3
-                  [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0],           # 4
-                  [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0],           # 5
-                  [0, 0, 2, 1, 4, 2, 6, 10, 10, 6, 20, 20, 20, 20, 20, 20, 0],   # 6
-                  [0, 0, 0, 0, 0, 0, 0, 0, 0, 1, 2, 3, 4, 5, 5, 5, 0],           # 7
-                  [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0],           # 8
-                  [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0]]           # 9
 
 # Distance factor: Contests with "True" will take the distance into account for score calculation
 CONTEST_DIST =  [False,   # 0
@@ -234,6 +239,7 @@ wsjt_2_logging_enabled = False
 Number_Dupes = 0
 Latest_QSO_Dist = 0
 display_grid_boxes = 1
+Score_Calc_Error = False
 
 
 # M_A_I_N__C_O_D_E
@@ -422,6 +428,7 @@ def calculate_score(Contest):
     global Contest_Number
     global Score
     global QSO_List
+    global Score_Calc_Error
     
     Grid_List = []
     Band_List = []
@@ -432,61 +439,68 @@ def calculate_score(Contest):
     Unique_Band_List= []
     Multiplier = 0
     
-    # List of unique grids from which the user operated.
-    for i in range(0,len(QSO_List)):
-        Own_Grid_List.append(QSO_List[i][OWN_GRIDSQUARE_POS][0:4]) # Only consider first 4 grid square characters)
-    Unique_Own_Grid_List = list(set(Own_Grid_List))  # creates a list of unique gridsquares (no duplicates)   
-    # QSO points and band factor calculations. Some contests consider QSO points as multipliers!
-    for i in range(0,len(QSO_List)):
-        Grid_List.append(QSO_List[i][GRIDSQUARE_POS])
-        Band_List.append(QSO_List[i][BAND_POS])
-        if not (QSO_Listbox.itemcget(i, 'foreground') == 'red'): # Rejects dupes in the QSO points calculation
-            QSO_Points += QSO_POINTS_TBL[Contest_Number][CONTEST_BANDS[Contest_Number].index(QSO_List[i][BAND_POS])]
-    # Calculate Multipliers. Each grid square counts as a multiplier on each band
-    Temp_List = []
-    Unique_Band_List = list(set(Band_List))  # creates a list of unique bands worked (no duplicates)
-    for i in range(0,len(Unique_Band_List)):
+    try:
+        # List of unique grids from which the user operated.
+        for i in range(0,len(QSO_List)):
+            Own_Grid_List.append(QSO_List[i][OWN_GRIDSQUARE_POS][0:4]) # Only consider first 4 grid square characters)
+        Unique_Own_Grid_List = list(set(Own_Grid_List))  # creates a list of unique gridsquares (no duplicates)   
+        # QSO points and band factor calculations. Some contests consider QSO points as multipliers!
+    #    print('==========')
+        for i in range(0,len(QSO_List)):
+            Grid_List.append(QSO_List[i][GRIDSQUARE_POS])
+            Band_List.append(QSO_List[i][BAND_POS])
+            if not (QSO_Listbox.itemcget(i, 'foreground') == 'red'): # Rejects dupes in the QSO points calculation
+                QSO_Points += QSO_POINTS_TBL[Contest_Number][CONTEST_BANDS[Contest_Number].index(QSO_List[i][BAND_POS])]
+    #            print(QSO_POINTS_TBL[Contest_Number][CONTEST_BANDS[Contest_Number].index(QSO_List[i][BAND_POS])])
+        # Calculate Multipliers. Each grid square counts as a multiplier on each band
         Temp_List = []
-        for j in range(0,len(QSO_List)):
-            if Band_List[j] == Unique_Band_List[i]: Temp_List.append(Grid_List[j][0:4]) # Only consider first 4 grid square characters
-        Multiplier += len(list(set(Temp_List))) # The sum of all unique grids contacted per band        
-    Number_Grids = Multiplier  # The sum of unique grids for all bands 
-    # For ARRL VHF contests, add rover multipliers (1 additional for each grid square worked from) 
-    if (1 <= Contest_Number <= 3) and (len(Unique_Own_Grid_List) > 1): Multiplier += len(Unique_Own_Grid_List)
-    Number_QSOs = QSO_Listbox.size()
-    Number_Bands = len(Unique_Band_List)      # Counts unique bands
-    Number_Activ_Grids = len(Unique_Own_Grid_List)
-    # Calculate total distance with Band Factor. Band factor is for 10 GHz and Up Contest.
-    Total_Dist = 0
-    Tot_Band_Factor_Dist = 0
-    stuffed_own_gridsquare = Own_Gridsquare
-    if (len(Own_Gridsquare) == 4):   # 4-character operator's grid square must be stuffed to 6 characters
-        stuffed_own_gridsquare = Own_Gridsquare + 'LL'  # Assumes the center of the grid
-    for i in range(0,len(QSO_List)):
-        if not (QSO_Listbox.itemcget(i, 'foreground') == 'red'): # Rejects dupes in the QSO points calculation
-            if (len(QSO_List[i][GRIDSQUARE_POS]) == 4):   # 4-character grid square
-                stuffed_gridsquare = QSO_List[i][GRIDSQUARE_POS] + 'LL'  # Assumes the center of the grid
-                QSO_Dist = Dist_Between_2_GridSquares(stuffed_own_gridsquare,stuffed_gridsquare)
-                Total_Dist += QSO_Dist
-            else:   # Full 6-character grid square
-                if (Own_Gridsquare == QSO_List[i][GRIDSQUARE_POS]):
-                    Total_Dist += 1
-                    Tot_Band_Factor_Dist += 1 * BAND_FACTOR[Contest_Number][CONTEST_BANDS[Contest_Number].index(QSO_List[i][BAND_POS])]
-                else:
-                    QSO_Dist = Dist_Between_2_GridSquares(Own_Gridsquare,QSO_List[i][GRIDSQUARE_POS])
+        Unique_Band_List = list(set(Band_List))  # creates a list of unique bands worked (no duplicates)
+        for i in range(0,len(Unique_Band_List)):
+            Temp_List = []
+            for j in range(0,len(QSO_List)):
+                if Band_List[j] == Unique_Band_List[i]: Temp_List.append(Grid_List[j][0:4]) # Only consider first 4 grid square characters
+            Multiplier += len(list(set(Temp_List))) # The sum of all unique grids contacted per band        
+        Number_Grids = Multiplier  # The sum of unique grids for all bands 
+        # For ARRL VHF contests, add rover multipliers (1 additional for each grid square worked from) 
+        if (1 <= Contest_Number <= 3) and (len(Unique_Own_Grid_List) > 1): Multiplier += len(Unique_Own_Grid_List)
+        Number_QSOs = QSO_Listbox.size()
+        Number_Bands = len(Unique_Band_List)      # Counts unique bands
+        Number_Activ_Grids = len(Unique_Own_Grid_List)
+        # Calculate total distance with Band Factor. Band factor is for 10 GHz and Up Contest.
+        Total_Dist = 0
+        Tot_Band_Factor_Dist = 0
+        stuffed_own_gridsquare = Own_Gridsquare
+        if (len(Own_Gridsquare) == 4):   # 4-character operator's grid square must be stuffed to 6 characters
+            stuffed_own_gridsquare = Own_Gridsquare + 'LL'  # Assumes the center of the grid
+        for i in range(0,len(QSO_List)):
+            if not (QSO_Listbox.itemcget(i, 'foreground') == 'red'): # Rejects dupes in the QSO points calculation
+                if (len(QSO_List[i][GRIDSQUARE_POS]) == 4):   # 4-character grid square
+                    stuffed_gridsquare = QSO_List[i][GRIDSQUARE_POS] + 'LL'  # Assumes the center of the grid
+                    QSO_Dist = Dist_Between_2_GridSquares(stuffed_own_gridsquare,stuffed_gridsquare)
                     Total_Dist += QSO_Dist
-                    # Calculate band factor distance for ARRL 222+ and 10G+ contests
-                    Tot_Band_Factor_Dist += QSO_Dist * BAND_FACTOR[Contest_Number][CONTEST_BANDS[Contest_Number].index(QSO_List[i][BAND_POS])]                
-    # Calculate final score, depending on contest
-    if not(CONTEST_DIST[Contest_Number]):   # Check of it is a 4 character grid square contest
-        Score = QSO_Points * Multiplier
-    elif (Contest_Number == 5):   # NA Microwave Sprint (6-char. Grid Sq.)
-        Score = Total_Dist
-    elif (Contest_Number == 6):   # ARRL 222 MHz+ Contest (6-char. Grid Sq.)
-        Score = Tot_Band_Factor_Dist
-    elif (Contest_Number == 7):   # ARRL 10 GHz+ Contest (6-char. Grid Sq.)
-        Score = Tot_Band_Factor_Dist + QSO_Points
-
+                else:   # Full 6-character grid square
+                    if (Own_Gridsquare == QSO_List[i][GRIDSQUARE_POS]):
+                        Total_Dist += 1
+                        Tot_Band_Factor_Dist += 1 * BAND_FACTOR[Contest_Number][CONTEST_BANDS[Contest_Number].index(QSO_List[i][BAND_POS])]
+                    else:
+                        QSO_Dist = Dist_Between_2_GridSquares(Own_Gridsquare,QSO_List[i][GRIDSQUARE_POS])
+                        Total_Dist += QSO_Dist
+                        # Calculate band factor distance for ARRL 222+ and 10G+ contests
+                        Tot_Band_Factor_Dist += QSO_Dist * BAND_FACTOR[Contest_Number][CONTEST_BANDS[Contest_Number].index(QSO_List[i][BAND_POS])]
+    #                    print(BAND_FACTOR[Contest_Number][CONTEST_BANDS[Contest_Number].index(QSO_List[i][BAND_POS])])
+        # Calculate final score, depending on contest
+        if not(CONTEST_DIST[Contest_Number]):   # Check of it is a 4 character grid square contest
+            Score = QSO_Points * Multiplier
+        elif (Contest_Number == 5):   # NA Microwave Sprint (6-char. Grid Sq.)
+            Score = Total_Dist
+        elif (Contest_Number == 6):   # ARRL 222 MHz+ Contest (6-char. Grid Sq.)
+            Score = Tot_Band_Factor_Dist
+        elif (Contest_Number == 7):   # ARRL 10 GHz+ Contest (6-char. Grid Sq.)
+            Score = Tot_Band_Factor_Dist + QSO_Points
+        Score_Calc_Error = False
+    except:
+        Score_Calc_Error = True
+        pass
 #Converts the Callsign to uppercase and check for duplicates on-the-fly
 def validate_callsign(event):
     CallSign_Entry_Val.set(CallSign_Entry_Val.get().upper())
@@ -728,8 +742,15 @@ def check_and_save_qso_from_wsjt_thread():
         elif (int(wsjt_band.split('.')[0])) in range(122250,123001): wsjt_band = "122G"
         elif (int(wsjt_band.split('.')[0])) in range(134000,141001): wsjt_band = "134G"
         elif (int(wsjt_band.split('.')[0])) in range(241000,250001): wsjt_band = "241G"
-        else: wsjt_band = "???"            
-
+        else: wsjt_band = "???"
+        
+        # Calculate the distance between the 2 grids
+        stuffed_gridsquare = wsjt_gridsquare.ljust(8, ' ')
+        stuffed_own_gridsquare = Own_Gridsquare.ljust(8, ' ')
+        if (len(stuffed_gridsquare) == 4): stuffed_gridsquare = stuffed_gridsquare + 'LL'  # Assumes the center of the grid
+        if (len(stuffed_own_gridsquare) == 4): stuffed_own_gridsquare = stuffed_own_gridsquare + 'LL'  # Assumes the center of the grid
+        Latest_QSO_Dist = Dist_Between_2_GridSquares(stuffed_own_gridsquare,stuffed_gridsquare)
+        # Insert the new QSO in the QSO list
         QSO_Index = 0
         QSO_Listbox.insert(QSO_Index,wsjt_date.ljust(12, ' ')
                             + wsjt_time.ljust(6, ' ')
@@ -737,7 +758,8 @@ def check_and_save_qso_from_wsjt_thread():
                             + wsjt_mode.ljust(4, ' ')
                             + wsjt_callsign.ljust(10, ' ')
                             + wsjt_gridsquare.ljust(8, ' ')
-                            + Own_Gridsquare.ljust(8, ' '))
+                            + Own_Gridsquare.ljust(8, ' ')
+                            + str(Latest_QSO_Dist))
         for i in range(0,QSO_Listbox.size()):
             if (i%2==0): QSO_Listbox.itemconfigure(i, bg = "lightcyan2")  # even lines
             else: QSO_Listbox.itemconfigure(i, bg = "lightcyan3")   # Odd lines
@@ -912,17 +934,30 @@ def stats_button_clicked():
         # This function is defined inside the stats_button_clicked function because it refers to its widgets
         def update_stats():
             calculate_score(Contest_Number)
-            Contest_Name_Label.config(text = CONTESTS[Contest_Number])
-            Contest_Results_Number2_Label.config(text = Number_QSOs)
-            Contest_Results_Number3_Label.config(text = Number_Dupes)
-            Contest_Results_Number4_Label.config(text = Number_Grids)
-            Contest_Results_Number5_Label.config(text = Number_Activ_Grids)
-            Contest_Results_Number6_Label.config(text = Number_Bands)
-            Contest_Results_Number7_Label.config(text = QSO_Points)
-            Contest_Results_Number8_Label.config(text = Multiplier)
-            Contest_Results_Number9_Label.config(text = Total_Dist)
-            Contest_Results_Number10_Label.config(text = Tot_Band_Factor_Dist)
-            Contest_Results_Number11_Label.config(text = Score)
+            if not(Score_Calc_Error): 
+                Contest_Name_Label.config(text = CONTESTS[Contest_Number])
+                Contest_Results_Number2_Label.config(text = Number_QSOs)
+                Contest_Results_Number3_Label.config(text = Number_Dupes)
+                Contest_Results_Number4_Label.config(text = Number_Grids)
+                Contest_Results_Number5_Label.config(text = Number_Activ_Grids)
+                Contest_Results_Number6_Label.config(text = Number_Bands)
+                Contest_Results_Number7_Label.config(text = QSO_Points)
+                Contest_Results_Number8_Label.config(text = Multiplier)
+                Contest_Results_Number9_Label.config(text = Total_Dist)
+                Contest_Results_Number10_Label.config(text = Tot_Band_Factor_Dist)
+                Contest_Results_Number11_Label.config(text = Score)
+            else:
+                Contest_Name_Label.config(text = CONTESTS[Contest_Number])
+                Contest_Results_Number2_Label.config(text = '-')
+                Contest_Results_Number3_Label.config(text = '-')
+                Contest_Results_Number4_Label.config(text = '-')
+                Contest_Results_Number5_Label.config(text = '-')
+                Contest_Results_Number6_Label.config(text = '-')
+                Contest_Results_Number7_Label.config(text = '-')
+                Contest_Results_Number8_Label.config(text = '-')
+                Contest_Results_Number9_Label.config(text = '-')
+                Contest_Results_Number10_Label.config(text = '-')
+                Contest_Results_Number11_Label.config(text = 'Inapplicable')                
             Stats_Window.after(500, update_stats)
 
         # This function is defined inside the stats_button_clicked function because it refers to its widgets      
@@ -1431,7 +1466,7 @@ create_hint(Sort_By_Band_Button,"Sorts the QSOs by alphabetical order of the rad
 
 Sort_By_Mode_Button = Button(button_frame1, text = "↓Mode", command = lambda: sort_qsos(3), fg = "blue", font = "Verdana 8", bd = 2)
 Sort_By_Mode_Button.pack(side=LEFT,fill="x", expand=True)
-create_hint(Sort_By_Mode_Button,"Sorts the QSOs by alphabetical order of the mode (PH, CW, DIG,...) column.") 
+create_hint(Sort_By_Mode_Button,"Sorts the QSOs by alphabetical order of the mode (PH, CW, DG,...) column.") 
 
 Sort_By_Call_Button = Button(button_frame1, text = "↓Call Sign", command = lambda: sort_qsos(4), fg = "blue", font = "Verdana 8", bd = 2)
 Sort_By_Call_Button.pack(side=LEFT,fill="x", expand=True)
@@ -2056,7 +2091,7 @@ Hint_Text_Box.config(state='disabled')
 try:
     file = open("./config.sav",'r') # Open config file for reading
     Contest_File_Name = file.readline()[:-1]
-    QSO_Entry_Window.geometry('{}x{}+{}+{}'.format(260,155,
+    QSO_Entry_Window.geometry('{}x{}+{}+{}'.format(260,160,
                             int(file.readline()[:-1]),
                             int(file.readline()[:-1])))
     QSO_List_Window.geometry(file.readline()[:-1])
