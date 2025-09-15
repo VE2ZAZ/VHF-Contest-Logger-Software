@@ -15,6 +15,9 @@
     
 # Release History
 #  - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
+# Version 1.62 (September 2025):
+# - Corrected distance calculation between two grids for WSJT-X QSOs, when grids are of 4-character type.
+#  - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
 # Version 1.61 (August 2025):
 # - Corrected misbehavior of logging a WSJT-X QSO. Logging a digital QSO would not include the distance between the two grid squares.
 #   This had the consequence of erasing the logbook file. It also caused grid square map misbehavior.
@@ -106,7 +109,7 @@ from math import sin, cos, sqrt, atan2, radians, degrees
 
 # C_O_N_S_T_A_N_T_S
 
-SW_VERSION = " 1.61  2025/08/04"
+SW_VERSION = " 1.62  2025/09/15"
 DATE_POS = 0
 TIME_POS = 1
 BAND_POS = 2
@@ -745,8 +748,8 @@ def check_and_save_qso_from_wsjt_thread():
         else: wsjt_band = "???"
         
         # Calculate the distance between the 2 grids
-        stuffed_gridsquare = wsjt_gridsquare.ljust(8, ' ')
-        stuffed_own_gridsquare = Own_Gridsquare.ljust(8, ' ')
+        stuffed_gridsquare = wsjt_gridsquare.ljust(8, ' ').strip()
+        stuffed_own_gridsquare = Own_Gridsquare.ljust(8, ' ').strip()
         if (len(stuffed_gridsquare) == 4): stuffed_gridsquare = stuffed_gridsquare + 'LL'  # Assumes the center of the grid
         if (len(stuffed_own_gridsquare) == 4): stuffed_own_gridsquare = stuffed_own_gridsquare + 'LL'  # Assumes the center of the grid
         Latest_QSO_Dist = Dist_Between_2_GridSquares(stuffed_own_gridsquare,stuffed_gridsquare)
