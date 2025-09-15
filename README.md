@@ -10,6 +10,12 @@ This amateur radio software provides the ability to log and display the QSOs (ra
 Please see the [Help.pdf](./Help.pdf) file for all the details on this software package, the installation procedure and  for some additional screenshots of the software windows.
 
 # Release History
+### Version 1.62 (September 2025):
+- Corrected distance calculation between two grids for WSJT-X QSOs, when grids are of 4-character type.
+### Version 1.61 (August 2025):
+- Corrected misbehavior of logging a WSJT-X QSO. Logging a digital QSO would not include the distance between the two grid squares. This had the consequence of erasing the logbook file. It also caused grid square map misbehavior.
+- For digital QSOs, both "DG" and "DIG" were used for the mode. Only "DG" is allowed in Cabrillo. Corrected.
+- Corrected a score calculation error for the distance-based contests.
 ### Version 1.6 (June 2025):
 - Added the CQ World Wide VHF Contests (both analog and digital). Made the ARRL June and September VHF Contests separate choices.
 - Added support for Rovers contesting in more than one grid.
