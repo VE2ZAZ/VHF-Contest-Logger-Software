@@ -15,6 +15,15 @@
     
 # Release History
 #  - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
+# Version 1.63 (September 2025):
+# - Score and Statistics calculations:
+#   - Rover oparation now taken into account in the distance calculation between two grids. Affects final score.
+#   - Stats window: For 6-character gridquare contests, the number of worked grids now takes 6-character grid squares into grid square count
+#   - ARRL 10GHz+ Contest:
+#     	- Removed dupe verification for minimum distance (16km), as 6-character grid square center-to-center distance may fail the minimum required,
+#         however actual positions within the grids may not.
+#       - Added unique callsigns per band checks, so another QSO with same station, same band, but different grid is not counted in QSO points
+#  - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
 # Version 1.62 (September 2025):
 # - Corrected distance calculation between two grids for WSJT-X QSOs, when grids are of 4-character type.
 #  - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
@@ -109,7 +118,7 @@ from math import sin, cos, sqrt, atan2, radians, degrees
 
 # C_O_N_S_T_A_N_T_S
 
-SW_VERSION = " 1.62  2025/09/15"
+SW_VERSION = " 1.63  2025/09/28"
 DATE_POS = 0
 TIME_POS = 1
 BAND_POS = 2
@@ -286,14 +295,16 @@ def dupe_check():
                 Error_Text_Label.lift()
                 Error_Text_Label.config(text = 'Warning: Duplicate QSO found', bg = "sienna1")                
                 break
-            elif ((Contest_Number == 7)
+            elif ((Contest_Number == 7) # 10G+ Contest
                  and (CallSign_Entry_Val.get() == QSO_String_List[4])
                  and (CallSign_Entry_Val.get() != "")
                  and (GridSquare_Entry_Val.get() != "")
                  and (Band_Combo_Val.get() == QSO_String_List[2])
                  and (len(GridSquare_Entry_Val.get()) == 6)
-                 and (not((Dist_Between_2_GridSquares(GridSquare_Entry_Val.get()[0:6],QSO_String_List[5][0:6]) > 16)
-                         or (Dist_Between_2_GridSquares(Own_Gridsquare[0:6],QSO_String_List[6][0:6]) > 16)))):  #Either station must have moved by at least 16 km for a QSO in the same grids to be valid
+                 and (GridSquare_Entry_Val.get()[0:6] == QSO_String_List[5][0:6])):
+                # Removed the minimum distance check, replaced by simple grid square match check above. 
+                # and (not((Dist_Between_2_GridSquares(GridSquare_Entry_Val.get()[0:6],QSO_String_List[5][0:6]) > 16)
+                #         or (Dist_Between_2_GridSquares(Own_Gridsquare[0:6],QSO_String_List[6][0:6]) > 16)))):  #Either station must have moved by at least 16 km for a QSO in the same grids to be valid
                 QSO_Listbox.selection_clear(0, END)         # Dupe is found; set orange color to QSO Entry window widgets
                 QSO_Entry_Window.configure(bg = "sienna1")    
                 QSO_Lower_button_frame.configure(bg = "sienna1")    
@@ -356,11 +367,13 @@ def qso_listbox_dupe_check():
                 QSO_Listbox.itemconfig(i, {'foreground':'red'})
                 QSO_Listbox.itemconfig(j, {'foreground':'DarkOrange'})
                 QSO_Listbox.see(i)
-            elif ((Contest_Number == 7)
+            elif ((Contest_Number == 7) # 10G+ Contest
             and (QSO_1[BAND_POS] == QSO_2[BAND_POS])
             and (QSO_1[CALLSIGN_POS] == QSO_2[CALLSIGN_POS])
-            and (not((Dist_Between_2_GridSquares(QSO_1[GRIDSQUARE_POS][0:6],QSO_2[GRIDSQUARE_POS][0:6]) > 16)
-                     or (Dist_Between_2_GridSquares(QSO_1[OWN_GRIDSQUARE_POS][0:6],QSO_2[OWN_GRIDSQUARE_POS][0:6]) > 16)))):  #Either station must have moved by at least 16 km for a QSO in the same grids to be valid
+            and (QSO_1[GRIDSQUARE_POS][0:6] == QSO_2[OWN_GRIDSQUARE_POS][0:6])):
+            # Removed the minimum distance check, replaced by simple grid square match check above.    
+            #and (not((Dist_Between_2_GridSquares(QSO_1[GRIDSQUARE_POS][0:6],QSO_2[GRIDSQUARE_POS][0:6]) > 16)
+            #         or (Dist_Between_2_GridSquares(QSO_1[OWN_GRIDSQUARE_POS][0:6],QSO_2[OWN_GRIDSQUARE_POS][0:6]) > 16)))):  #Either station must have moved by at least 16 km for a QSO in the same grids to be valid
                 QSO_Listbox.itemconfig(i, {'foreground':'red'})
                 QSO_Listbox.itemconfig(j, {'foreground':'DarkOrange'})
                 QSO_Listbox.see(i)                  
@@ -373,7 +386,7 @@ def Update_QSO_List_Banner():
     global Contest_File_Name
     QSO_List_Window.title("VCL - " + CONTESTS[Contest_Number] + "  :  " + os.path.basename(Contest_File_Name).split(".VHFlog")[0])
 
-# Derives the latitude and longitude of a grid square
+# Derives the latitude and longitude of the center of a grid square
 def GridSquare_2_LatLong(gs):
     #Decode Latitude: 2nd character (a letter)
     gs_lat = (ord(gs[1]) - 65) * 10
@@ -440,6 +453,7 @@ def calculate_score(Contest):
     update_qso_list()
     QSO_Points = 0
     Unique_Band_List= []
+    Num_Unique_Calls_Per_band = 0
     Multiplier = 0
     
     try:
@@ -455,14 +469,30 @@ def calculate_score(Contest):
             if not (QSO_Listbox.itemcget(i, 'foreground') == 'red'): # Rejects dupes in the QSO points calculation
                 QSO_Points += QSO_POINTS_TBL[Contest_Number][CONTEST_BANDS[Contest_Number].index(QSO_List[i][BAND_POS])]
     #            print(QSO_POINTS_TBL[Contest_Number][CONTEST_BANDS[Contest_Number].index(QSO_List[i][BAND_POS])])
+        Unique_Band_List = list(set(Band_List))  # creates a list of unique bands worked (no duplicates)
+        # QSO points recalculeted for the 10G+ Contest
+        if (Contest_Number == 7):
+            QSO_Points = 0
+            Num_Unique_Calls_Per_band = 0
+            for i in range(0,len(Unique_Band_List)):
+                Temp_List = []
+                for j in range(0,len(QSO_List)):
+                    if QSO_List[j][BAND_POS] == Unique_Band_List[i]:
+                        Temp_List.append(QSO_List[j][CALLSIGN_POS]) # add callsign to list
+                Num_Unique_Calls_Per_band += len(list(set(Temp_List)))
+                QSO_Points += len(list(set(Temp_List))) * QSO_POINTS_TBL[Contest_Number][CONTEST_BANDS[Contest_Number].index(QSO_List[j][BAND_POS])]
+#            print(Num_Unique_Calls_Per_band)                
+#            print(QSO_Points)
         # Calculate Multipliers. Each grid square counts as a multiplier on each band
         Temp_List = []
-        Unique_Band_List = list(set(Band_List))  # creates a list of unique bands worked (no duplicates)
         for i in range(0,len(Unique_Band_List)):
             Temp_List = []
             for j in range(0,len(QSO_List)):
-                if Band_List[j] == Unique_Band_List[i]: Temp_List.append(Grid_List[j][0:4]) # Only consider first 4 grid square characters
-            Multiplier += len(list(set(Temp_List))) # The sum of all unique grids contacted per band        
+                if Band_List[j] == Unique_Band_List[i]:
+                    if (Contest_Number == 7): Temp_List.append(Grid_List[j][0:6]) # 10G+ Contest
+                    else: Temp_List.append(Grid_List[j][0:4]) # Only consider first 4 grid square characters
+            Multiplier += len(list(set(Temp_List))) # The sum of all unique grids contacted per band
+            
         Number_Grids = Multiplier  # The sum of unique grids for all bands 
         # For ARRL VHF contests, add rover multipliers (1 additional for each grid square worked from) 
         if (1 <= Contest_Number <= 3) and (len(Unique_Own_Grid_List) > 1): Multiplier += len(Unique_Own_Grid_List)
@@ -473,24 +503,26 @@ def calculate_score(Contest):
         Total_Dist = 0
         Tot_Band_Factor_Dist = 0
         stuffed_own_gridsquare = Own_Gridsquare
+#        print('----------------------')
         if (len(Own_Gridsquare) == 4):   # 4-character operator's grid square must be stuffed to 6 characters
             stuffed_own_gridsquare = Own_Gridsquare + 'LL'  # Assumes the center of the grid
         for i in range(0,len(QSO_List)):
             if not (QSO_Listbox.itemcget(i, 'foreground') == 'red'): # Rejects dupes in the QSO points calculation
                 if (len(QSO_List[i][GRIDSQUARE_POS]) == 4):   # 4-character grid square
                     stuffed_gridsquare = QSO_List[i][GRIDSQUARE_POS] + 'LL'  # Assumes the center of the grid
+                    stuffed_own_gridsquare = QSO_List[i][OWN_GRIDSQUARE_POS] + 'LL'
                     QSO_Dist = Dist_Between_2_GridSquares(stuffed_own_gridsquare,stuffed_gridsquare)
                     Total_Dist += QSO_Dist
                 else:   # Full 6-character grid square
-                    if (Own_Gridsquare == QSO_List[i][GRIDSQUARE_POS]):
+                    if (QSO_List[i][OWN_GRIDSQUARE_POS] == QSO_List[i][GRIDSQUARE_POS]):
                         Total_Dist += 1
                         Tot_Band_Factor_Dist += 1 * BAND_FACTOR[Contest_Number][CONTEST_BANDS[Contest_Number].index(QSO_List[i][BAND_POS])]
                     else:
-                        QSO_Dist = Dist_Between_2_GridSquares(Own_Gridsquare,QSO_List[i][GRIDSQUARE_POS])
+                        QSO_Dist = Dist_Between_2_GridSquares(QSO_List[i][OWN_GRIDSQUARE_POS],QSO_List[i][GRIDSQUARE_POS])
+#                        print(QSO_Dist)
                         Total_Dist += QSO_Dist
                         # Calculate band factor distance for ARRL 222+ and 10G+ contests
                         Tot_Band_Factor_Dist += QSO_Dist * BAND_FACTOR[Contest_Number][CONTEST_BANDS[Contest_Number].index(QSO_List[i][BAND_POS])]
-    #                    print(BAND_FACTOR[Contest_Number][CONTEST_BANDS[Contest_Number].index(QSO_List[i][BAND_POS])])
         # Calculate final score, depending on contest
         if not(CONTEST_DIST[Contest_Number]):   # Check of it is a 4 character grid square contest
             Score = QSO_Points * Multiplier
