@@ -10,6 +10,13 @@ This amateur radio software provides the ability to log and display the QSOs (ra
 Please see the [Help.pdf](./Help.pdf) file for all the details on this software package, the installation procedure and  for some additional screenshots of the software windows.
 
 # Release History
+###Version 1.63 (September 2025):
+- Score and Statistics calculations:
+  - Rover oparation now taken into account in the distance calculation between two grids. Affects final score.
+  - Stats window: For 6-character gridquare contests, the number of worked grids now takes 6-character grid squares into grid square count
+  - ARRL 10GHz+ Contest:
+    - Removed dupe verification for minimum distance (16km), as 6-character grid square center-to-center distance may fail the minimum required, however actual positions within the grids may not.
+    - Added unique callsigns per band checks, so another QSO with same station, same band, but different grid is not counted in QSO points
 ### Version 1.62 (September 2025):
 - Corrected distance calculation between two grids for WSJT-X QSOs, when grids are of 4-character type.
 ### Version 1.61 (August 2025):
