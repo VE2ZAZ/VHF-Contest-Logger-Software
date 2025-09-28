@@ -10,7 +10,7 @@ This amateur radio software provides the ability to log and display the QSOs (ra
 Please see the [Help.pdf](./Help.pdf) file for all the details on this software package, the installation procedure and  for some additional screenshots of the software windows.
 
 # Release History
-###Version 1.63 (September 2025):
+### Version 1.63 (September 2025):
 - Score and Statistics calculations:
   - Rover oparation now taken into account in the distance calculation between two grids. Affects final score.
   - Stats window: For 6-character gridquare contests, the number of worked grids now takes 6-character grid squares into grid square count
