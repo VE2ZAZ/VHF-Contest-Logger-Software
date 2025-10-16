@@ -10,6 +10,9 @@ This amateur radio software provides the ability to log and display the QSOs (ra
 Please see the [Help.pdf](./Help.pdf) file for all the details on this software package, the installation procedure and  for some additional screenshots of the software windows.
 
 # Release History
+### Version 1.64 (October 2025):
+- Corrected the dupe checking of the NA VHF and Microwave Sprints. Different mode (analog vs. digital) QSOs are no longer flagged as dupes.
+- Improved QSO list sorting by distance. Now sorts numerically instead of alpha-numerically.
 ### Version 1.63 (September 2025):
 - Score and Statistics calculations:
   - Rover oparation now taken into account in the distance calculation between two grids. Affects final score.
