@@ -15,6 +15,10 @@
     
 # Release History
 #  - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
+# Version 1.64 (October 2025):
+# - Corrected the dupe checking of the NA VHF and Microwave Sprints. Different mode (analog vs. digital) QSOs are no longer flagged as dupes.
+# - Improved QSO list sorting by distance. Now sorts numerically instead of alpha-numerically.
+#  - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
 # Version 1.63 (September 2025):
 # - Score and Statistics calculations:
 #   - Rover oparation now taken into account in the distance calculation between two grids. Affects final score.
@@ -118,7 +122,7 @@ from math import sin, cos, sqrt, atan2, radians, degrees
 
 # C_O_N_S_T_A_N_T_S
 
-SW_VERSION = " 1.63  2025/09/28"
+SW_VERSION = " 1.64  2025/10/15"
 DATE_POS = 0
 TIME_POS = 1
 BAND_POS = 2
@@ -256,10 +260,28 @@ Score_Calc_Error = False
 
 # M_A_I_N__C_O_D_E
 
+def Set_Dupe_Colors():
+    QSO_Listbox.selection_clear(0, END)         # Dupe is found; set orange color to QSO Entry window widgets
+    QSO_Entry_Window.configure(bg = "sienna1")    
+    QSO_Lower_button_frame.configure(bg = "sienna1")    
+    QSO_Upper_button_frame.configure(bg = "sienna1")    
+    QSO_Buttons_Frame.configure(bg = "sienna1")    
+    Date_Entry_Label.configure(bg = "sienna1")    
+    Time_Entry_Label.configure(bg = "sienna1")    
+    Band_Combo_Label.configure(bg = "sienna1")    
+    CallSign_Entry_Label.configure(bg = "sienna1")    
+    GridSquare_Entry_Label.configure(bg = "sienna1")    
+    Mode_Combo_Label.configure(bg = "sienna1")    
+    QSO_Listbox.configure(selectbackground="sienna1")
+    Error_Text_Label.lift()
+    Error_Text_Label.config(text = 'Warning: Duplicate QSO found', bg = "sienna1")
+
+
 # This function checks for a duplicate QSO in the QSO list vs. what is currently entered in the QSO entry window fields
 def dupe_check():
     global QSO_Line
     global Edit_QSO_Action
+    print('Dupe Check')
     if (Edit_QSO_Action) and ((QSO_Line[BAND_POS] == Band_Combo_Val.get())   # Verifies if all fields are the same as the recalled QSO in Edit mode
     and (QSO_Line[CALLSIGN_POS] == CallSign_Entry_Val.get()) and (CallSign_Entry_Val.get() != "")
     and (QSO_Line[GRIDSQUARE_POS] == GridSquare_Entry_Val.get()) and (Band_Combo_Val.get() != "")
@@ -270,32 +292,47 @@ def dupe_check():
     else:   # Now search for dupe QSO in QSO listbox.
         for i in range(0,QSO_Listbox.size()):
             QSO_String_List = QSO_Listbox.get(i).split() # Creates a list of the QSO line fields
-            if ((Contest_Number != 7)    # Not the ARRL 10 GHz+ Contest
+            if ((Contest_Number in [1, 2, 3, 6, 8, 9])    # Not the ARRL 10 GHz+ Contest
                  and (CallSign_Entry_Val.get() == QSO_String_List[4])
                  and (CallSign_Entry_Val.get() != "")
                  and (GridSquare_Entry_Val.get()[0:4] == QSO_String_List[5][0:4])
                  and (GridSquare_Entry_Val.get() != "")
                  and (Band_Combo_Val.get() == QSO_String_List[2])
                  and (Own_Gridsquare[0:4] == QSO_String_List[6][0:4])):
-                QSO_Listbox.selection_clear(0, END)         # Dupe is found; set orange color to QSO Entry window widgets
-                QSO_Entry_Window.configure(bg = "sienna1")    
-                QSO_Lower_button_frame.configure(bg = "sienna1")    
-                QSO_Upper_button_frame.configure(bg = "sienna1")    
-                QSO_Buttons_Frame.configure(bg = "sienna1")    
-                Date_Entry_Label.configure(bg = "sienna1")    
-                Time_Entry_Label.configure(bg = "sienna1")    
-                Band_Combo_Label.configure(bg = "sienna1")    
-                CallSign_Entry_Label.configure(bg = "sienna1")    
-                GridSquare_Entry_Label.configure(bg = "sienna1")    
-                Mode_Combo_Label.configure(bg = "sienna1")    
-                QSO_Listbox.configure(selectbackground="sienna1")
+                Set_Dupe_Colors()
                 QSO_Listbox.selection_set(i)
                 QSO_Listbox.index(i)
                 QSO_Listbox.see(i)
-                Error_Text_Label.lift()
-                Error_Text_Label.config(text = 'Warning: Duplicate QSO found', bg = "sienna1")                
                 break
-            elif ((Contest_Number == 7) # 10G+ Contest
+            elif ((Contest_Number in [4,5]) # VHF Sprint: Can work a station both in analog and digital
+                 and (CallSign_Entry_Val.get() == QSO_String_List[4])
+                 and (CallSign_Entry_Val.get() != "")
+                 and (GridSquare_Entry_Val.get() != "")
+                 and (Band_Combo_Val.get() == QSO_String_List[2])
+#                 and (len(GridSquare_Entry_Val.get()) == 6)
+                 and (GridSquare_Entry_Val.get()[0:4] == QSO_String_List[5][0:4])
+                 and (((Mode_Combo_Val.get() in ['CW','PH','FM']) and (QSO_String_List[3] in ['CW','PH','FM']))
+                      or ((Mode_Combo_Val.get() in ['RY','DG']) and (QSO_String_List[3] in ['RY','DG'])))):
+                Set_Dupe_Colors()
+                QSO_Listbox.selection_set(i)
+                QSO_Listbox.index(i)
+                QSO_Listbox.see(i)
+                break                
+#             elif ((Contest_Number in [5]) # Microwave Sprint: Can work a station both in analog and digital
+#                  and (CallSign_Entry_Val.get() == QSO_String_List[4])
+#                  and (CallSign_Entry_Val.get() != "")
+#                  and (GridSquare_Entry_Val.get() != "")
+#                  and (Band_Combo_Val.get() == QSO_String_List[2])
+#                  and (len(GridSquare_Entry_Val.get()) == 6)
+#                  and (GridSquare_Entry_Val.get()[0:6] == QSO_String_List[5][0:6])
+#                  and (((Mode_Combo_Val.get() in ['CW','PH','FM']) and (QSO_String_List[3] in ['CW','PH','FM']))
+#                       or ((Mode_Combo_Val.get() in ['RY','DG']) and (QSO_String_List[3] in ['RY','DG'])))):
+#                 Set_Dupe_Colors()
+#                 QSO_Listbox.selection_set(i)
+#                 QSO_Listbox.index(i)
+#                 QSO_Listbox.see(i)
+#                 break                
+            elif ((Contest_Number in [7]) # 10G+ Contest
                  and (CallSign_Entry_Val.get() == QSO_String_List[4])
                  and (CallSign_Entry_Val.get() != "")
                  and (GridSquare_Entry_Val.get() != "")
@@ -305,23 +342,10 @@ def dupe_check():
                 # Removed the minimum distance check, replaced by simple grid square match check above. 
                 # and (not((Dist_Between_2_GridSquares(GridSquare_Entry_Val.get()[0:6],QSO_String_List[5][0:6]) > 16)
                 #         or (Dist_Between_2_GridSquares(Own_Gridsquare[0:6],QSO_String_List[6][0:6]) > 16)))):  #Either station must have moved by at least 16 km for a QSO in the same grids to be valid
-                QSO_Listbox.selection_clear(0, END)         # Dupe is found; set orange color to QSO Entry window widgets
-                QSO_Entry_Window.configure(bg = "sienna1")    
-                QSO_Lower_button_frame.configure(bg = "sienna1")    
-                QSO_Upper_button_frame.configure(bg = "sienna1")    
-                QSO_Buttons_Frame.configure(bg = "sienna1")    
-                Date_Entry_Label.configure(bg = "sienna1")    
-                Time_Entry_Label.configure(bg = "sienna1")    
-                Band_Combo_Label.configure(bg = "sienna1")    
-                CallSign_Entry_Label.configure(bg = "sienna1")    
-                GridSquare_Entry_Label.configure(bg = "sienna1")    
-                Mode_Combo_Label.configure(bg = "sienna1")    
-                QSO_Listbox.configure(selectbackground="sienna1")
+                Set_Dupe_Colors()
                 QSO_Listbox.selection_set(i)
                 QSO_Listbox.index(i)
                 QSO_Listbox.see(i)
-                Error_Text_Label.lift()
-                Error_Text_Label.config(text = 'Error: Either station must move > 16 km', bg = "sienna1")
                 break                
             else:      # No duplicate, set the various widget colors back to normal
                 QSO_Entry_Window.configure(bg = Default_BG_Color)    
@@ -339,7 +363,6 @@ def dupe_check():
                 Error_Text_Label.config(text = '')
                 Error_Text_Label.lower()
                 Error_Text_Label.config(bg =  Default_BG_Color)                
-
     QSO_Entry_Window.update()
 
 # This function is required because the ComboBox sends an event as parameter, unlike other widgets
@@ -359,7 +382,7 @@ def qso_listbox_dupe_check():
             while "" in QSO_1: QSO_1.remove("") # Removes empty strings from list
             QSO_2 =  QSO_Listbox.get(j).split(" ")
             while "" in QSO_2: QSO_2.remove("") # Removes empty strings from list
-            if ((Contest_Number != 7)    # Not the ARRL 10 GHz+ Contest
+            if ((Contest_Number in [1, 2, 3, 6, 8, 9])    # Regular VHF Contest
             and (QSO_1[BAND_POS] == QSO_2[BAND_POS])
             and (QSO_1[CALLSIGN_POS] == QSO_2[CALLSIGN_POS])
             and (QSO_1[GRIDSQUARE_POS][0:4] == QSO_2[GRIDSQUARE_POS][0:4])
@@ -367,6 +390,26 @@ def qso_listbox_dupe_check():
                 QSO_Listbox.itemconfig(i, {'foreground':'red'})
                 QSO_Listbox.itemconfig(j, {'foreground':'DarkOrange'})
                 QSO_Listbox.see(i)
+            elif (Contest_Number in [4,5]): # VHF Sprint: Can work a station both in analog and digital
+                if ((QSO_1[BAND_POS] == QSO_2[BAND_POS])
+                    and (QSO_1[CALLSIGN_POS] == QSO_2[CALLSIGN_POS])
+                    and (QSO_1[GRIDSQUARE_POS][0:4] == QSO_2[GRIDSQUARE_POS][0:4])
+                    and (QSO_1[OWN_GRIDSQUARE_POS][0:4] == QSO_2[OWN_GRIDSQUARE_POS][0:4])
+                    and (((QSO_1[MODE_POS] in ['CW','PH','FM']) and (QSO_2[MODE_POS] in ['CW','PH','FM']))
+                        or ((QSO_1[MODE_POS] in ['RY','DG']) and (QSO_2[MODE_POS] in ['RY','DG'])))):
+                    QSO_Listbox.itemconfig(i, {'foreground':'red'})
+                    QSO_Listbox.itemconfig(j, {'foreground':'DarkOrange'})
+                    QSO_Listbox.see(i)
+#             elif (Contest_Number in [5]): # VHF Sprint: Can work a station both in analog and digital
+#                 if ((QSO_1[BAND_POS] == QSO_2[BAND_POS])
+#                     and (QSO_1[CALLSIGN_POS] == QSO_2[CALLSIGN_POS])
+#                     and (QSO_1[GRIDSQUARE_POS][0:4] == QSO_2[GRIDSQUARE_POS][0:4])
+#                     and (QSO_1[OWN_GRIDSQUARE_POS][0:4] == QSO_2[OWN_GRIDSQUARE_POS][0:4])
+#                     and (((QSO_1[MODE_POS] in ['CW','PH','FM']) and (QSO_2[MODE_POS] in ['CW','PH','FM']))
+#                         or ((QSO_1[MODE_POS] in ['RY','DG']) and (QSO_2[MODE_POS] in ['RY','DG'])))):
+#                     QSO_Listbox.itemconfig(i, {'foreground':'red'})
+#                     QSO_Listbox.itemconfig(j, {'foreground':'DarkOrange'})
+#                     QSO_Listbox.see(i)
             elif ((Contest_Number == 7) # 10G+ Contest
             and (QSO_1[BAND_POS] == QSO_2[BAND_POS])
             and (QSO_1[CALLSIGN_POS] == QSO_2[CALLSIGN_POS])
@@ -1110,7 +1153,10 @@ def sort_qsos(field):
     global QSO_List
     # Create list of QSOs
     update_qso_list()
-    QSO_List.sort(key=lambda x: x[field])
+    if (field == 7): 	# Sort numerically for distance column
+        QSO_List.sort(key=lambda x: int(x[field]))
+    else:					# otherwise sort alpha-numerically
+        QSO_List.sort(key=lambda x: x[field])        
     for i in range(0,QSO_Listbox.size()):    
         QSO_Listbox.delete(i)
         QSO_Listbox.insert(i,QSO_List[i][DATE_POS].ljust(12, ' ') + QSO_List[i][TIME_POS].ljust(6, ' ') + QSO_List[i][BAND_POS].ljust(6, ' ')
@@ -1680,6 +1726,7 @@ Mode_Combo['values'] = (CONTEST_MODES[Contest_Number])
 Mode_Combo.set("")
 Mode_Combo['state'] = 'readonly'
 Mode_Combo.bind("<Escape>", clear_qso_text_button_clicked)
+Mode_Combo.bind('<<ComboboxSelected>>', combobox_dupe_check)
 Mode_Combo.grid(row=3, column=2, padx=2)    
 create_hint(Mode_Combo,"Modulation mode used for the QSO. Provided in the Cabrillo file submitted to the ARRL.")
 
